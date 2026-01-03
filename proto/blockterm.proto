@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package blockterm;
+
+option go_package = "github.com/entl/BlockTerm";
+
+import "google/protobuf/empty.proto";
+/* ============================
+   Core Terminal Service
+   ============================ */
+
+service TerminalService {
+  rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
+  rpc CloseSession(CloseSessionRequest) returns (Ack);
+
+  rpc SendInput(stream InputChunk) returns (Ack);
+  rpc ReceiveOutput(ReceiveOutputRequest) returns (stream OutputChunk);
+
+  rpc ResizeSession(ResizeSessionRequest) returns (Ack);
+}
+
+/* ============================
+   Suggestions / Autocomplete
+   ============================ */
+
+service SuggestionService {
+  rpc GetSuggestions(GetSuggestionsRequest) returns (GetSuggestionsResponse);
+}
+
+/* ============================
+   History Persistence
+   ============================ */
+
+service HistoryService {
+  rpc RecordCommand(RecordCommandRequest) returns (Ack);
+  rpc QueryHistory(QueryHistoryRequest) returns (QueryHistoryResponse);
+}
+
+/* ============================
+   Workspace / Layout Restore
+   ============================ */
+
+service WorkspaceService {
+  rpc SaveLayout(SaveLayoutRequest) returns (Ack);
+  rpc LoadLayout(google.protobuf.Empty) returns (LoadLayoutResponse);
+}
+
+/* ============================
+   System / Health
+   ============================ */
+
+service SystemService {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc GetVersion(google.protobuf.Empty) returns (VersionResponse);
+}
+
+/* ============================
+   Messages
+   ============================ */
+
+message StartSessionRequest {
+  string shell = 1;                 // "bash", "zsh", "powershell"
+  string cwd = 2;                   // starting directory
+  map<string,string> env = 3;       // environment overrides
+}
+
+message StartSessionResponse {
+  string session_id = 1;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message InputChunk {
+  string session_id = 1;
+  bytes data = 2;                   // raw terminal input
+}
+
+message ReceiveOutputRequest {
+  string session_id = 1;
+}
+
+message OutputChunk {
+  string session_id = 1;
+  bytes data = 2;                   // raw terminal output
+}
+
+message ResizeSessionRequest {
+  string session_id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+message GetSuggestionsRequest {
+  string session_id = 1;
+  string input = 2;
+  uint32 cursor_pos = 3;
+}
+
+message Suggestion {
+  string text = 1;
+  string source = 2;                // "history", "filesystem", "static", "ai"
+  float score = 3;
+}
+
+message GetSuggestionsResponse {
+  repeated Suggestion suggestions = 1;
+}
+
+message RecordCommandRequest {
+  string session_id = 1;
+  string command = 2;
+  string cwd = 3;
+  int32 exit_code = 4;
+  int64 timestamp = 5;
+}
+
+message QueryHistoryRequest {
+  string query = 1;
+  uint32 limit = 2;
+}
+
+message QueryHistoryResponse {
+  repeated RecordCommandRequest entries = 1;
+}
+
+message SaveLayoutRequest {
+  bytes json_layout = 1;            // serialized layout JSON
+}
+
+message LoadLayoutResponse {
+  bytes json_layout = 1;
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+}
+
+message VersionResponse {
+  string version = 1;
+  string build = 2;
+}
+
+message Ack {
+  bool ok = 1;
+}
