@@ -176,3 +176,5 @@ vite.config.ts.timestamp-*
 
 *.sqlite*
 .vscode/*
+dist*/
+bin/
