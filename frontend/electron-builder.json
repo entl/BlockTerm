@@ -1,0 +1,18 @@
+{
+    "appId": "com.maksym-vorobyov.blockterm",
+    "files": [
+        "dist-react",
+        "dist-electron"
+    ],
+    "icon": "./desktopIcon.png",
+    "mac": {
+        "target": "dmg"
+    },
+    "linux": {
+        "target": "AppImage",
+        "category": "Utility"
+    },
+    "win": {
+        "target": ["portable", "msi"]
+    }
+}
