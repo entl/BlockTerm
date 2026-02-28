@@ -178,3 +178,6 @@ vite.config.ts.timestamp-*
 .vscode/*
 dist*/
 bin/
+
+*stories/
+*stories*

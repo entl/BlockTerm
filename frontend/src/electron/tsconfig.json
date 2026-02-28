@@ -3,7 +3,14 @@
         "strict": true,
         "target": "esnext",
         "module": "nodenext",
+        "moduleResolution": "nodenext",
         "outDir": "../../dist-electron",
-        "skipLibCheck": true
-    }
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "declaration": false
+    },
+    "include": [
+        "./**/*.ts",
+        "../shared/**/*.ts"
+    ]
 }

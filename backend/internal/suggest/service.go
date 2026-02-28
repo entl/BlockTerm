@@ -2,6 +2,7 @@ package suggest
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -62,6 +63,8 @@ func (s *SuggestionService) GetSuggestions(ctx context.Context, req *pb.GetSugge
 	if len(deduped) > 50 {
 		deduped = deduped[:50]
 	}
+
+	fmt.Println("Returning suggestions:", deduped)
 
 	return &pb.GetSuggestionsResponse{
 		Suggestions: deduped,
