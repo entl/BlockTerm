@@ -84,6 +84,9 @@ message ReceiveOutputRequest {
 message OutputChunk {
   string session_id = 1;
   bytes data = 2;                   // raw terminal output
+  string command_id = 3;            // unique identifier for the current command block
+  string status = 4;                // "running", "completed", "failed"
+  int32 exit_code = 5;              // exit code (only set when status is completed/failed)
 }
 
 message ResizeSessionRequest {

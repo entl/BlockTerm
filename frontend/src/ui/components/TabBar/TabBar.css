@@ -1,0 +1,137 @@
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background-color: #252526;
+  border-bottom: 1px solid #1e1e1e;
+  height: 36px;
+  /* 80px left padding clears the macOS traffic-light buttons (close /
+     minimize / maximize) which sit at x=12 and span ~68px total. */
+  padding: 0 8px 0 80px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.tab-bar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.tab-bar-tabs::-webkit-scrollbar {
+  height: 2px;
+}
+
+.tab-bar-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-bar-tabs::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 1px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: #2d2d2d;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  min-width: 100px;
+  max-width: 200px;
+  height: 28px;
+  transition: background-color 0.1s;
+}
+
+.tab:hover {
+  background-color: #3c3c3c;
+}
+
+.tab-active {
+  background-color: #1e1e1e;
+}
+
+.tab-active:hover {
+  background-color: #1e1e1e;
+}
+
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #808080;
+  flex-shrink: 0;
+}
+
+.tab-active .tab-icon {
+  color: #89d185;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #cccccc;
+}
+
+.tab-title-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #cccccc;
+  font-size: 12px;
+  padding: 0;
+  min-width: 50px;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #808080;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.1s, background-color 0.1s;
+  flex-shrink: 0;
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background-color: #4a4a4a;
+  color: #ffffff;
+}
+
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: #808080;
+  border-radius: 4px;
+  transition: background-color 0.1s, color 0.1s;
+  -webkit-app-region: no-drag;
+  margin-left: 4px;
+}
+
+.tab-add:hover {
+  background-color: #3c3c3c;
+  color: #ffffff;
+}

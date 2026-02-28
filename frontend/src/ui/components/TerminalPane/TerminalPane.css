@@ -1,0 +1,50 @@
+.terminal-pane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.terminal-pane-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.terminal-pane-active {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.terminal-pane-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #808080;
+  font-size: 14px;
+  z-index: 10;
+  background-color: rgba(30, 30, 30, 0.9);
+  padding: 12px 24px;
+  border-radius: 4px;
+}
+
+/* Terminal mode toggle button */
+.terminal-mode-toggle {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 100;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+
+.terminal-mode-toggle:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.terminal-mode-toggle:active {
+  transform: translateY(0);
+}
