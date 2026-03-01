@@ -76,7 +76,22 @@ func (p *FilesystemProvider) GetSuggestions(ctx context.Context, input string, c
 	var basePath string
 	var prefix string
 
-	if filepath.IsAbs(pathToComplete) {
+	// When the token ends with '/' the user has already fully accepted a directory
+	// name and wants to tab-complete *inside* it. filepath.Dir/Base both strip the
+	// trailing slash before computing, so "Developer/" would be treated identically
+	// to "Developer" and list the parent dir instead of the child. Detect this case
+	// first and enter the target directory directly with an empty prefix.
+	if strings.HasSuffix(pathToComplete, string(os.PathSeparator)) {
+		if filepath.IsAbs(pathToComplete) {
+			basePath = pathToComplete
+		} else if strings.HasPrefix(pathToComplete, "~") {
+			home := homeDir()
+			basePath = filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(pathToComplete, "~"), string(os.PathSeparator)))
+		} else {
+			basePath = filepath.Join(cwd, pathToComplete)
+		}
+		prefix = ""
+	} else if filepath.IsAbs(pathToComplete) {
 		// Absolute path
 		basePath = filepath.Dir(pathToComplete)
 		prefix = filepath.Base(pathToComplete)
@@ -124,6 +139,9 @@ func (p *FilesystemProvider) GetSuggestions(ctx context.Context, input string, c
 				} else {
 					completionText = "~" + relPath + "/" + name
 				}
+			} else if strings.HasSuffix(pathToComplete, string(os.PathSeparator)) {
+				// Token already ends with '/': just append the entry name.
+				completionText = pathToComplete + name
 			} else if strings.Contains(pathToComplete, string(os.PathSeparator)) {
 				completionText = filepath.Join(filepath.Dir(pathToComplete), name)
 			} else {

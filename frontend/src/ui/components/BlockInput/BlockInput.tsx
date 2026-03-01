@@ -231,6 +231,23 @@ export const BlockInput: React.FC<BlockInputProps> = ({
 
   const handleKeyDown = useCallback(
     async (e: React.KeyboardEvent<HTMLInputElement>) => {
+      // Ctrl+C: clear input if non-empty, otherwise send interrupt to PTY.
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault();
+        if (command) {
+          // Discard whatever was typed — classic shell Ctrl+C behaviour.
+          setCommand('');
+          setInlineSuggestion(null);
+          setShowSuggestions(false);
+          setSuggestions([]);
+          historyIndexRef.current = -1;
+        } else if (sessionId) {
+          // Empty input (or passthrough mode): send SIGINT to the running process.
+          window.terminalApi.sendInput(sessionId, '\x03');
+        }
+        return;
+      }
+
       // Handle suggestion dropdown navigation
       if (showSuggestions && suggestions.length > 0) {
         if (e.key === 'ArrowDown') {
@@ -336,6 +353,7 @@ export const BlockInput: React.FC<BlockInputProps> = ({
     },
     [
       command,
+      sessionId,
       showSuggestions,
       suggestions,
       selectedSuggestionIndex,
