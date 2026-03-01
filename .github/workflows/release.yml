@@ -53,7 +53,7 @@ jobs:
 
       - name: Build Electron app (mac)
         working-directory: frontend
-        run: npm run dist:mac
+        run: npm run dist:mac -- --publish never
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -103,7 +103,7 @@ jobs:
 
       - name: Build Electron app (linux)
         working-directory: frontend
-        run: npm run dist:linux
+        run: npm run dist:linux -- --publish never
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -153,7 +153,7 @@ jobs:
 
       - name: Build Electron app (win)
         working-directory: frontend
-        run: npm run dist:win
+        run: npm run dist:win -- --publish never
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
