@@ -499,6 +499,15 @@ export function useTerminalTabs() {
     [tabs],
   );
 
+  /** Restore full workspace state (tabs + active tab). */
+  const restoreWorkspace = useCallback(
+    (restoredTabs: TabState[], restoredActiveTabId: string) => {
+      setTabs(restoredTabs);
+      setActiveTabId(restoredActiveTabId);
+    },
+    [],
+  );
+
   return {
     tabs,
     activeTabId,
@@ -514,5 +523,6 @@ export function useTerminalTabs() {
     closePane,
     resizeBranch,
     getTabSessionIds,
+    restoreWorkspace,
   };
 }

@@ -64,10 +64,10 @@ export class BackendManager extends EventEmitter {
       // Development: backend binary in backend/bin
       return path.join(app.getAppPath(), '..', 'backend', 'bin', 'server');
     } else {
-      // Production: bundled with app
+      // Production: bundled in Resources/backend/
       const platform = process.platform;
       const binaryName = platform === 'win32' ? 'server.exe' : 'server';
-      return path.join(app.getAppPath(), '..', 'resources', 'backend', binaryName);
+      return path.join(process.resourcesPath, 'backend', binaryName);
     }
   }
 

@@ -21,6 +21,8 @@ import { useBlocks } from '../../hooks';
 import './BlockTerminal.css';
 
 export interface BlockTerminalProps {
+  /** Pane ID used for workspace persistence (block registry). */
+  paneId?: string;
   sessionId: string | null;
   currentPath?: string;
   autoScroll?: boolean;
@@ -28,12 +30,13 @@ export interface BlockTerminalProps {
 }
 
 export const BlockTerminal: React.FC<BlockTerminalProps> = ({
+  paneId,
   sessionId,
   currentPath = '~',
   autoScroll = true,
   showInput = true,
 }) => {
-  const { blockData, isFullscreen, currentCwd, isCommandRunning, addBlock } = useBlocks({ sessionId, currentPath });
+  const { blockData, isFullscreen, currentCwd, isCommandRunning, addBlock } = useBlocks({ sessionId, paneId, currentPath });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<TerminalRef>(null);
@@ -112,10 +115,26 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
     scrollToBottom();
   }, [outputFingerprint, autoScroll, scrollToBottom]);
 
-  // Focus the right element when fullscreen mode changes
+  // Focus the right element when fullscreen mode changes and force a repaint.
+  // The xterm overlay is visibility:hidden while not fullscreen, so the WebGL
+  // renderer silently discards paint operations. When we become visible we
+  // must re-fit (so the canvas has correct dimensions) and force a full
+  // refresh so all rows are repainted.  Without this, apps like vim that draw
+  // once and then wait for input would show a blank screen.
   useEffect(() => {
     if (isFullscreen) {
-      xtermRef.current?.focus();
+      // Wait one frame so the DOM has applied visibility:visible before we
+      // try to measure / paint.
+      requestAnimationFrame(() => {
+        xtermRef.current?.fit();
+        // Force a full-row repaint so the WebGL canvas redraws the content
+        // that was written while the overlay was hidden.
+        const term = xtermRef.current?.terminal;
+        if (term) {
+          term.refresh(0, term.rows - 1);
+        }
+        xtermRef.current?.focus();
+      });
     }
   }, [isFullscreen]);
 
@@ -317,7 +336,7 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
         }`}
         ref={containerRef}
       >
-        {blockData.map((item, idx) => {
+        {blockData.map((item) => {
           // Calculate match index for this block, separately for command & output
           const blockCommandMatches = searchMatches.filter(m => m.blockId === item.block.id && m.area === 'command');
           const blockOutputMatches = searchMatches.filter(m => m.blockId === item.block.id && m.area === 'output');

@@ -25,7 +25,6 @@
   background: #1a1a1a;
   border: none;
   border-top: 1px solid #2a2a2a;
-  overflow: hidden;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
@@ -34,9 +33,6 @@
   transition: border-left-color 0.15s ease;
   /* Prevent flex-shrink from squashing blocks instead of scrolling the parent */
   flex-shrink: 0;
-  /* Prevent horizontal overflow – block must stay within its parent */
-  min-width: 0;
-  max-width: 100%;
 }
 
 .block-root:hover {
@@ -67,6 +63,9 @@
   padding: 7px 10px;
   background: #1e1e1e;
   min-height: 36px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 /* Collapse chevron */
@@ -196,14 +195,10 @@
      overflow-x: auto provides horizontal scroll for long lines. */
   white-space: pre;
   overflow-x: auto;
-  max-height: 480px;
-  overflow-y: auto;
+  overflow-y: visible;
   font-size: 13px;
   line-height: 1.5;
   tab-size: 8;
-  /* Constrain to block width – long lines scroll inside instead of expanding */
-  max-width: 100%;
-  box-sizing: border-box;
 }
 
 /* Scrollbar */

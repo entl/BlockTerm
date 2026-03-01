@@ -66,3 +66,76 @@
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11px;
 }
+
+/* ── Git info ─────────────────────────────────────────────────────────────── */
+
+.status-git {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  padding-left: 10px;
+}
+
+.status-git-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.status-git-branch {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-git-diff {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.status-git-added {
+  color: #89d185;
+  font-weight: 600;
+}
+
+.status-git-deleted {
+  color: #f48771;
+  font-weight: 600;
+}
+
+/* ── Python env ────────────────────────────────────────────────────────────── */
+
+.status-python {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  padding-left: 10px;
+}
+
+.status-python-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.status-python-name {
+  font-weight: 500;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-python-version {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 10px;
+}

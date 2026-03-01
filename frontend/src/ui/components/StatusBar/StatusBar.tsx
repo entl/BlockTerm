@@ -1,17 +1,18 @@
 /**
- * StatusBar component - shows backend connection status and other info
+ * StatusBar component - shows backend connection status, git info, and python env
  */
 
-import type { BackendStatus } from '../../../shared/types';
+import type { BackendStatus, EnvInfo } from '../../../shared/types';
 import './StatusBar.css';
 
 export interface StatusBarProps {
   backendStatus: BackendStatus;
   error?: string | null;
   sessionId?: string | null;
+  envInfo?: EnvInfo | null;
 }
 
-export function StatusBar({ backendStatus, error, sessionId }: StatusBarProps) {
+export function StatusBar({ backendStatus, error, sessionId, envInfo }: StatusBarProps) {
   const getStatusIndicator = () => {
     switch (backendStatus) {
       case 'ready':
@@ -28,6 +29,8 @@ export function StatusBar({ backendStatus, error, sessionId }: StatusBarProps) {
   };
 
   const status = getStatusIndicator();
+  const git = envInfo?.git ?? null;
+  const python = envInfo?.python ?? null;
 
   return (
     <div className="status-bar">
@@ -37,7 +40,37 @@ export function StatusBar({ backendStatus, error, sessionId }: StatusBarProps) {
           <span className="status-text">{status.text}</span>
         </div>
         {error && <span className="status-error-message">{error}</span>}
+
+        {/* Git branch + diff stats */}
+        {git && (
+          <span className="status-git">
+            <span className="status-git-icon" aria-hidden="true">⎏</span>
+            <span className="status-git-branch">{git.branch}</span>
+            {(git.added > 0 || git.deleted > 0) && (
+              <span className="status-git-diff">
+                {git.added > 0 && (
+                  <span className="status-git-added">+{git.added}</span>
+                )}
+                {git.deleted > 0 && (
+                  <span className="status-git-deleted">−{git.deleted}</span>
+                )}
+              </span>
+            )}
+          </span>
+        )}
+
+        {/* Python environment */}
+        {python && (
+          <span className="status-python">
+            <span className="status-python-icon" aria-hidden="true">🐍</span>
+            <span className="status-python-name">{python.name}</span>
+            {python.version && (
+              <span className="status-python-version">{python.version}</span>
+            )}
+          </span>
+        )}
       </div>
+
       <div className="status-bar-right">
         {sessionId && (
           <span className="status-session">Session: {sessionId.slice(0, 8)}...</span>

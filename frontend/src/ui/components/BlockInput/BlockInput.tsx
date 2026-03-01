@@ -318,11 +318,10 @@ export const BlockInput: React.FC<BlockInputProps> = ({
       if (!showSuggestions) {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          if (command.trim()) {
-            // Non-empty input → show filtered history dropdown
-            await fetchHistorySuggestions(command);
-          } else {
-            // Empty input → sequential history walk (classic shell behaviour)
+          if (historyIndexRef.current !== -1 || !command.trim()) {
+            // Already walking history, OR empty input → continue sequential walk.
+            // We must check historyIndexRef first so that pressing ArrowUp on a
+            // history-filled input keeps walking rather than opening the dropdown.
             await loadHistory();
             if (historyRef.current.length === 0) return;
             if (historyIndexRef.current === -1) {
@@ -335,6 +334,10 @@ export const BlockInput: React.FC<BlockInputProps> = ({
             historyIndexRef.current = next;
             setCommand(historyRef.current[next]);
             setInlineSuggestion(null);
+          } else {
+            // Non-empty input typed by the user (not from history walk) →
+            // show a filtered history dropdown for the typed prefix.
+            await fetchHistorySuggestions(command);
           }
         } else if (e.key === 'ArrowDown') {
           e.preventDefault();

@@ -11,6 +11,8 @@ import type {
   Suggestion,
   SuggestionMode,
   BackendStatus,
+  SavedWorkspace,
+  EnvInfo,
 } from '../shared/types.js';
 
 // Map to track output listeners per session
@@ -107,6 +109,18 @@ const terminalApi: TerminalApi = {
 
   async ping(): Promise<string> {
     return ipcRenderer.invoke('system:ping');
+  },
+
+  saveWorkspace(data: SavedWorkspace): void {
+    ipcRenderer.send('workspace:save', data);
+  },
+
+  async loadWorkspace(): Promise<SavedWorkspace | null> {
+    return ipcRenderer.invoke('workspace:load');
+  },
+
+  async getEnvInfo(cwd: string): Promise<EnvInfo> {
+    return ipcRenderer.invoke('system:getEnvInfo', cwd);
   },
 };
 

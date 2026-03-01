@@ -7,9 +7,12 @@ import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import { app } from 'electron';
 import { EventEmitter } from 'events';
+import { isDev } from './utils.js';
 
-// Proto file path
-const PROTO_PATH = path.join(app.getAppPath(), '..', 'proto', 'blockterm.proto');
+// Proto file path – in dev, resolve from project root; in production, from Resources/
+const PROTO_PATH = isDev()
+  ? path.join(app.getAppPath(), '..', 'proto', 'blockterm.proto')
+  : path.join(process.resourcesPath, 'proto', 'blockterm.proto');
 
 // Load proto definition
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {

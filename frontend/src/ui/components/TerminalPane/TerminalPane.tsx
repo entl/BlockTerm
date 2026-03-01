@@ -7,6 +7,7 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { Terminal, type TerminalRef } from '../Terminal';
 import { BlockTerminal } from '../BlockTerminal';
 import { useCommandBuffer } from '../../hooks';
+import { getRestoredPaneData } from '../../services/workspaceStore';
 import './TerminalPane.css';
 
 export interface TerminalPaneProps {
@@ -47,9 +48,13 @@ export function TerminalPane({
           const cols = term?.cols ?? 80;
           const rows = term?.rows ?? 24;
 
+          // Use restored cwd if this pane is being restored from a saved workspace
+          const restoredData = getRestoredPaneData(tabId);
+
           const newSessionId = await window.terminalApi.createSession({
             cols,
             rows,
+            cwd: restoredData?.cwd,
           });
           
           onSessionCreate(tabId, newSessionId);
@@ -76,6 +81,15 @@ export function TerminalPane({
       terminalRef.current?.focus();
     }
   }, [isActive, terminalMode]);
+
+  // Re-fit xterm when pane becomes active (e.g. after tab switch).
+  // display:none→block causes the container size to change from 0 to actual,
+  // and xterm needs to recalculate its dimensions.
+  useEffect(() => {
+    if (isActive) {
+      requestAnimationFrame(() => terminalRef.current?.fit());
+    }
+  }, [isActive]);
 
   // Re-fit xterm when switching to plain mode
   useEffect(() => {
@@ -186,6 +200,7 @@ export function TerminalPane({
       </div>
       <div className={`terminal-pane-view${terminalMode === 'block' ? ' terminal-pane-view--visible' : ''}`}>
         <BlockTerminal
+          paneId={tabId}
           sessionId={sessionId}
           autoScroll={true}
           showInput={true}

@@ -12,8 +12,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { Block } from '../../shared/types';
+import type { Block, PythonEnvInfo } from '../../shared/types';
 import { cleanTerminalOutput, findTrailingPartialEscape } from '../lib/utils';
+import {
+  registerPaneBlocks,
+  unregisterPaneBlocks,
+  consumeRestoredPaneData,
+} from '../services/workspaceStore';
 
 // ── Marker constants ──────────────────────────────────────────────────────────
 const MARKER_START = '<<<BLOCKTERM:START>>>';
@@ -39,6 +44,40 @@ function extractOsc7Cwd(raw: string): string | null {
     }
   }
   return last;
+}
+
+// Matches BLOCKTERM:PYENV markers emitted by the shell's precmd hook:
+//   <<<BLOCKTERM:PYENV ve=/path/to/.venv;ce=myenv;py=3.11.2>>>
+// All three fields are always present but may be empty.
+const MARKER_PYENV_RE = /<<<BLOCKTERM:PYENV ve=([^;]*);ce=([^;]*);py=([^>]*)>>>/;
+
+/**
+ * Extract Python env info from a BLOCKTERM:PYENV marker.
+ * Returns:
+ *   - PythonEnvInfo  if an environment is active
+ *   - null           if marker is present but all fields are empty (env deactivated)
+ *   - undefined      if no marker was found in this chunk (no change)
+ */
+function extractPyenvMarker(text: string): PythonEnvInfo | null | undefined {
+  const m = MARKER_PYENV_RE.exec(text);
+  if (!m) return undefined;
+
+  const ve = m[1].trim(); // VIRTUAL_ENV (full path)
+  const ce = m[2].trim(); // CONDA_DEFAULT_ENV
+  const py = m[3].trim(); // PYENV_VERSION
+
+  if (ve) {
+    // Derive display name from the last path segment, e.g. /project/.venv → .venv
+    const name = ve.replace(/\/+$/, '').split('/').pop() ?? ve;
+    return { name, type: 'venv' };
+  }
+  if (ce) {
+    return { name: ce, type: 'conda' };
+  }
+  if (py) {
+    return { name: py, type: 'pyenv', version: py };
+  }
+  return null; // marker present, all values empty → no active env
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,16 +109,20 @@ export interface BlockData {
 
 export interface UseBlocksOptions {
   sessionId: string | null;
+  paneId?: string;
   currentPath?: string;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
+export function useBlocks({ sessionId, paneId, currentPath = '~' }: UseBlocksOptions) {
   const [blocks, setBlocks] = useState<Block[]>([]);  const [isFullscreen, setIsFullscreen] = useState(false);
   // Tracks the most-recently-received OSC 7 cwd; falls back to currentPath prop.
   const cwdRef = useRef<string>(currentPath);
   const [currentCwd, setCurrentCwd] = useState<string>(currentPath);
+  // Tracks the most-recently-received BLOCKTERM:PYENV value.
+  const pythonEnvRef = useRef<PythonEnvInfo | null>(null);
+  const [pythonEnv, setPythonEnv] = useState<PythonEnvInfo | null>(null);
   // Content map: blockId → trimmed output text (only between START / END).
   // Stored in a ref for synchronous mutation, mirrored to state for renders.
   const blockContentsRef = useRef<Map<string, string>>(new Map());
@@ -96,20 +139,67 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
   // creating a new block (e.g. when a command asks for credentials).
   const [isCommandRunning, setIsCommandRunning] = useState(false);
 
+  // ── Workspace restore tracking ────────────────────────────────────────────
+  /** True after restored blocks have been injected (prevents re-reset). */
+  const hasRestoredRef = useRef(false);
+  /** Previous sessionId so we can detect null → string transition. */
+  const prevSessionIdRef = useRef<string | null>(null);
+
   // Reset parser state when the session changes
   useEffect(() => {
+    const prevSessionId = prevSessionIdRef.current;
+    prevSessionIdRef.current = sessionId;
+
+    // When transitioning from null → real session after a restore,
+    // skip the reset so the restored blocks remain visible.
+    if (hasRestoredRef.current && prevSessionId === null && sessionId !== null) {
+      return;
+    }
+
     activeBlockIdRef.current = null;
     activeBlockCommandRef.current = '';
     inBlockRef.current = false;
     fragmentRef.current = '';
     rawBufferRef.current = '';
-    blockContentsRef.current = new Map();
-    cwdRef.current = currentPath;
-    setBlocks([]);
-    setBlockContents(new Map());
-    setCurrentCwd(currentPath);
     setIsFullscreen(false);
     setIsCommandRunning(false);
+
+    // Check for restored workspace data (only once per pane lifetime)
+    if (paneId && !hasRestoredRef.current) {
+      const restored = consumeRestoredPaneData(paneId);
+      if (restored && restored.blocks.length > 0) {
+        const restoredBlocks: Block[] = restored.blocks.map(sb => ({
+          id: sb.id,
+          sessionId: sessionId ?? '',
+          command: sb.command,
+          cwd: sb.cwd,
+          startOffset: 0,
+          endOffset: 0,
+          exitCode: sb.exitCode,
+          timestamp: sb.timestamp,
+          collapsed: sb.collapsed,
+        }));
+        const restoredContents = new Map<string, string>();
+        restored.blocks.forEach(sb => restoredContents.set(sb.id, sb.output));
+
+        blockContentsRef.current = restoredContents;
+        setBlocks(restoredBlocks);
+        setBlockContents(restoredContents);
+        cwdRef.current = restored.cwd;
+        setCurrentCwd(restored.cwd);
+        hasRestoredRef.current = true;
+        return;
+      }
+    }
+
+    // Normal (non-restore) reset
+    blockContentsRef.current = new Map();
+    setBlocks([]);
+    setBlockContents(new Map());
+    cwdRef.current = currentPath;
+    setCurrentCwd(currentPath);
+    pythonEnvRef.current = null;
+    setPythonEnv(null);
   }, [sessionId]);
 
   // ── Output subscription ───────────────────────────────────────────────────
@@ -149,6 +239,14 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
       }
 
       const cleaned = cleanTerminalOutput(raw);
+
+      // Parse BLOCKTERM:PYENV markers (plain text, survives ANSI stripping).
+      // undefined = no marker in chunk (no-op); null = marker present but empty (clear).
+      const newPyenv = extractPyenvMarker(cleaned);
+      if (newPyenv !== undefined) {
+        pythonEnvRef.current = newPyenv;
+        setPythonEnv(newPyenv);
+      }
 
       // Reassemble any partial marker left over from the previous chunk.
       let text = fragmentRef.current + cleaned;
@@ -309,5 +407,19 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
     [blocks, blockContents],
   );
 
-  return { blocks, blockData, isFullscreen, currentCwd, isCommandRunning, addBlock, toggleCollapse };
+  // ── Sync blocks to workspace store for persistence ────────────────────────
+  useEffect(() => {
+    if (paneId) {
+      registerPaneBlocks(paneId, blocks, blockContents, cwdRef.current, pythonEnvRef.current);
+    }
+  }, [paneId, blocks, blockContents]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (paneId) unregisterPaneBlocks(paneId);
+    };
+  }, [paneId]);
+
+  return { blocks, blockData, isFullscreen, currentCwd, pythonEnv, isCommandRunning, addBlock, toggleCollapse };
 }

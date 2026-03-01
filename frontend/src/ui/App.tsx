@@ -2,12 +2,17 @@
  * Main App component - Terminal application with tabs and split panes
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { TabBar } from './components/TabBar';
 import { StatusBar } from './components';
 import { SplitContainer } from './components/SplitContainer';
-import { useTerminalTabs, useBackendStatus } from './hooks';
+import { useTerminalTabs, useBackendStatus, useEnvInfo } from './hooks';
 import type { SplitDirection } from '../shared/types';
+import {
+  serializeWorkspace,
+  deserializeWorkspace,
+  getPaneBlockData,
+} from './services/workspaceStore';
 import './App.css';
 
 function App() {
@@ -25,17 +30,77 @@ function App() {
     closePane,
     resizeBranch,
     getTabSessionIds,
+    restoreWorkspace,
   } = useTerminalTabs();
 
   // Per-pane terminal display mode ('plain' | 'block')
   const [terminalModes, setTerminalModes] = useState<Record<string, 'plain' | 'block'>>({});
 
-  // Create initial tab when backend is ready and no tabs exist
+  // Workspace persistence state
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+
+  // Refs for stable save function (avoids stale closures)
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
+  const terminalModesRef = useRef(terminalModes);
+  terminalModesRef.current = terminalModes;
+
+  // Stable save function that reads from refs
+  const doSaveWorkspace = useCallback(() => {
+    const currentTabs = tabsRef.current;
+    if (currentTabs.length === 0) return;
+    const workspace = serializeWorkspace(
+      currentTabs,
+      activeTabIdRef.current,
+      terminalModesRef.current,
+    );
+    window.terminalApi.saveWorkspace(workspace);
+  }, []);
+
+  // Load saved workspace on mount
   useEffect(() => {
-    if (status === 'ready' && tabs.length === 0) {
+    window.terminalApi
+      .loadWorkspace()
+      .then(saved => {
+        if (saved && saved.tabs.length > 0) {
+          const { tabs: restoredTabs, activeTabId: restoredActiveTabId, terminalModes: restoredModes } =
+            deserializeWorkspace(saved);
+          restoreWorkspace(restoredTabs, restoredActiveTabId);
+          setTerminalModes(restoredModes);
+        }
+        setWorkspaceLoaded(true);
+      })
+      .catch(() => setWorkspaceLoaded(true));
+  }, [restoreWorkspace]);
+
+  // Create initial tab when backend is ready, workspace loaded, and no tabs
+  useEffect(() => {
+    if (status === 'ready' && workspaceLoaded && tabs.length === 0) {
       addTab('Terminal');
     }
-  }, [status, tabs.length, addTab]);
+  }, [status, workspaceLoaded, tabs.length, addTab]);
+
+  // Debounced save on tab / mode changes
+  useEffect(() => {
+    if (!workspaceLoaded || tabs.length === 0) return;
+    const timer = setTimeout(doSaveWorkspace, 2000);
+    return () => clearTimeout(timer);
+  }, [tabs, activeTabId, terminalModes, workspaceLoaded, doSaveWorkspace]);
+
+  // Periodic save (captures block output changes every 10 s)
+  useEffect(() => {
+    if (!workspaceLoaded) return;
+    const interval = setInterval(doSaveWorkspace, 10_000);
+    return () => clearInterval(interval);
+  }, [workspaceLoaded, doSaveWorkspace]);
+
+  // Save on beforeunload (best-effort final save)
+  useEffect(() => {
+    window.addEventListener('beforeunload', doSaveWorkspace);
+    return () => window.removeEventListener('beforeunload', doSaveWorkspace);
+  }, [doSaveWorkspace]);
 
   // Handle tab selection
   const handleTabSelect = useCallback(
@@ -218,6 +283,15 @@ function App() {
     return findLeaf(activeTab.layout);
   })();
 
+  // Track the cwd of the active pane (updated by OSC 7 sequences via useBlocks)
+  const activePaneCwd = activeTab
+    ? (getPaneBlockData(activeTab.activePaneId)?.cwd ?? null)
+    : null;
+
+  // Detect git + python environment for the active pane's cwd.
+  // Python env is populated from the BLOCKTERM:PYENV shell marker (not filesystem).
+  const envInfo = useEnvInfo(activePaneCwd, activeTab?.activePaneId ?? null);
+
   return (
     <div className="app">
       <TabBar
@@ -280,6 +354,7 @@ function App() {
         backendStatus={status}
         error={backendError}
         sessionId={activePaneSessionId}
+        envInfo={envInfo}
       />
     </div>
   );

@@ -113,8 +113,92 @@ export interface SplitBranch {
 
 export type SplitNode = SplitLeaf | SplitBranch;
 
+// ── Workspace persistence types ─────────────────────────────────────────────
+
+/** A serialised block (command + output text). */
+export interface SavedBlock {
+  id: string;
+  command: string;
+  output: string;
+  cwd: string;
+  exitCode: number | null;
+  timestamp: number;
+  collapsed: boolean;
+}
+
+/** Persisted state of a single terminal pane. */
+export interface SavedPane {
+  id: string;
+  cwd: string;
+  blocks: SavedBlock[];
+  terminalMode: 'plain' | 'block';
+}
+
+/** Serialised leaf node with pane data. */
+export interface SavedSplitLeaf {
+  type: 'leaf';
+  id: string;
+  pane: SavedPane;
+}
+
+/** Serialised branch node. */
+export interface SavedSplitBranch {
+  type: 'branch';
+  id: string;
+  direction: SplitDirection;
+  children: SavedSplitNode[];
+  sizes: number[];
+}
+
+export type SavedSplitNode = SavedSplitLeaf | SavedSplitBranch;
+
+/** Serialised tab. */
+export interface SavedTab {
+  id: string;
+  title: string;
+  layout: SavedSplitNode;
+  activePaneId: string;
+}
+
+/** Top-level persisted workspace. */
+export interface SavedWorkspace {
+  version: 1;
+  activeTabId: string;
+  tabs: SavedTab[];
+  terminalModes: Record<string, 'plain' | 'block'>;
+  savedAt: number;
+}
+
 // Unsubscribe function type
 export type UnsubscribeFn = () => void;
+
+// ── Environment detection types ─────────────────────────────────────────────
+
+/** Git repository status for the current working directory. */
+export interface GitInfo {
+  /** Current branch name, or short SHA when in detached HEAD state. */
+  branch: string;
+  /** Lines added relative to HEAD (uncommitted changes). */
+  added: number;
+  /** Lines deleted relative to HEAD (uncommitted changes). */
+  deleted: number;
+}
+
+/** Active Python environment detected from the filesystem. */
+export interface PythonEnvInfo {
+  /** Environment name, e.g. ".venv", "myenv", "3.11.0" */
+  name: string;
+  /** Environment manager that owns this environment. */
+  type: 'venv' | 'conda' | 'pyenv' | 'system';
+  /** Python version string, if detectable. */
+  version?: string;
+}
+
+/** Combined environment context for the active terminal pane. */
+export interface EnvInfo {
+  git: GitInfo | null;
+  python: PythonEnvInfo | null;
+}
 
 // IPC Channel names
 export const IPC_CHANNELS = {
@@ -138,8 +222,13 @@ export const IPC_CHANNELS = {
   BACKEND_STATUS: 'backend:status',
   BACKEND_READY: 'backend:ready',
   
+  // Workspace persistence
+  SAVE_WORKSPACE: 'workspace:save',
+  LOAD_WORKSPACE: 'workspace:load',
+
   // System
   PING: 'system:ping',
+  GET_ENV_INFO: 'system:getEnvInfo',
 } as const;
 
 // Backend status

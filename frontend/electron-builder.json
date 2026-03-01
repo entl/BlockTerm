@@ -5,6 +5,18 @@
         "dist-electron"
     ],
     "icon": "./desktopIcon.png",
+    "extraResources": [
+        {
+            "from": "../proto",
+            "to": "proto",
+            "filter": ["*.proto"]
+        },
+        {
+            "from": "resources/backend",
+            "to": "backend",
+            "filter": ["server", "server.exe"]
+        }
+    ],
     "mac": {
         "target": "dmg"
     },

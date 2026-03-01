@@ -10,7 +10,7 @@ import path from 'path';
 import { isDev } from './utils.js';
 import { getBackendManager, BackendManager } from './backendManager.js';
 import { createGrpcClient, closeGrpcClient, getGrpcClient } from './grpcClient.js';
-import { setupIpcHandlers, cleanupIpcHandlers } from './ipcHandlers.js';
+import { setupIpcHandlers, cleanupIpcHandlers, saveWorkspaceSync } from './ipcHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 let backendManager: BackendManager | null = null;
@@ -112,6 +112,8 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+  // Flush latest workspace state to disk synchronously
+  saveWorkspaceSync();
   // Cleanup
   cleanupIpcHandlers();
   closeGrpcClient();

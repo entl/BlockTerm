@@ -42,6 +42,9 @@ __blockterm_precmd() {
   fi
   # OSC 7: broadcast current working directory so the UI can track cwd.
   printf '\e]7;file://%s%s\e\\' "${HOSTNAME:-$(hostname 2>/dev/null)}" "$PWD"
+  # Emit active Python environment so the UI can display it.
+  # We always emit even when no env is active so the UI can clear the indicator.
+  printf '<<<BLOCKTERM:PYENV ve=%s;ce=%s;py=%s>>>' "${VIRTUAL_ENV:-}" "${CONDA_DEFAULT_ENV:-}" "${PYENV_VERSION:-}"
 }
 
 # preexec – fires just before a command is executed.
@@ -108,7 +111,12 @@ function prompt {
     $__bt_exit = $LASTEXITCODE
     __BlockTerm-PreCmd -ExitCode $__bt_exit
     # OSC 7: broadcast current working directory.
-` + psOsc7 + `    & $__bt_originalPrompt
+` + psOsc7 + `    # Emit active Python environment indicator.
+    $__bt_ve  = if ($env:VIRTUAL_ENV)       { $env:VIRTUAL_ENV }       else { "" }
+    $__bt_ce  = if ($env:CONDA_DEFAULT_ENV) { $env:CONDA_DEFAULT_ENV } else { "" }
+    $__bt_py  = if ($env:PYENV_VERSION)     { $env:PYENV_VERSION }     else { "" }
+    [System.Console]::Out.Write("<<<BLOCKTERM:PYENV ve=$__bt_ve;ce=$__bt_ce;py=$__bt_py>>>")
+    & $__bt_originalPrompt
 }
 
 # Hook command execution via the Engine event

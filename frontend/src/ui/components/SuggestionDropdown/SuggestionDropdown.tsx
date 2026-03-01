@@ -19,7 +19,7 @@ export const SuggestionDropdown: React.FC<SuggestionDropdownProps> = ({
   suggestions,
   selectedIndex,
   onSelect,
-  onClose,
+  onClose: _onClose,
   visible,
 }) => {
   const listRef = useRef<HTMLDivElement>(null);
@@ -84,7 +84,7 @@ export const SuggestionDropdown: React.FC<SuggestionDropdownProps> = ({
       {suggestions.map((suggestion, index) => (
         <div
           key={`${suggestion.text}-${index}`}
-          ref={(el) => (itemRefs.current[index] = el)}
+          ref={(el) => { itemRefs.current[index] = el; }}
           className={`suggestion-item ${index === selectedIndex ? 'selected' : ''}`}
           onClick={(e) => handleClick(e, suggestion)}
           onMouseDown={(e) => e.preventDefault()} // Prevent input blur

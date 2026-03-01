@@ -10,6 +10,8 @@ import type {
   SuggestionMode,
   UnsubscribeFn,
   BackendStatus,
+  SavedWorkspace,
+  EnvInfo,
 } from './types.js';
 
 export interface TerminalApi {
@@ -73,6 +75,22 @@ export interface TerminalApi {
    * Ping the backend to check connectivity
    */
   ping(): Promise<string>;
+
+  /**
+   * Save workspace state to disk (fire-and-forget).
+   */
+  saveWorkspace(data: SavedWorkspace): void;
+
+  /**
+   * Load the last saved workspace state from disk.
+   */
+  loadWorkspace(): Promise<SavedWorkspace | null>;
+
+  /**
+   * Detect Python virtualenv / pyenv / conda and git branch + diff stats
+   * for the given working directory. Runs in the main process.
+   */
+  getEnvInfo(cwd: string): Promise<EnvInfo>;
 }
 
 // Augment the Window interface
