@@ -31,6 +31,8 @@ export const BlockInput: React.FC<BlockInputProps> = ({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [inlineSuggestion, setInlineSuggestion] = useState<string | null>(null);
+  /** Tracks what triggered the current dropdown so selection logic can adapt. */
+  const [suggestionSource, setSuggestionSource] = useState<'tab' | 'history'>('tab');
   
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,7 +42,9 @@ export const BlockInput: React.FC<BlockInputProps> = ({
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
 
-  // Fetch suggestions from backend
+  // Fetch suggestions from backend.
+  // Tab dropdown filters out history (filesystem + static only).
+  // Inline ghost uses all sources.
   const fetchSuggestions = useCallback(
     async (input: string, forDropdown = false) => {
       if (!sessionId || !input.trim()) {
@@ -58,15 +62,27 @@ export const BlockInput: React.FC<BlockInputProps> = ({
         );
 
         if (forDropdown) {
-          setSuggestions(results);
+          // Tab dropdown: exclude history — only filesystem + static
+          // (like a real terminal where Tab completes paths/commands)
+          const filtered = results.filter((s) => s.source !== 'history');
+          setSuggestionSource('tab');
+          setSuggestions(filtered);
           setSelectedSuggestionIndex(0);
-          setShowSuggestions(results.length > 0);
+          setShowSuggestions(filtered.length > 0);
         } else {
-          // For inline suggestion, show the best match's completion
+          // For inline suggestion, show the best match's completion.
+          // The backend returns suggestions for the last token only,
+          // so compare against the current token, not the full command.
           if (results.length > 0) {
             const bestMatch = results[0].text;
-            // Only show inline if it starts with the current input
-            if (bestMatch.toLowerCase().startsWith(input.toLowerCase()) && bestMatch !== input) {
+            // Extract last token from input
+            let tokenStart = input.length;
+            while (tokenStart > 0 && input[tokenStart - 1] !== ' ' && input[tokenStart - 1] !== '\t') {
+              tokenStart--;
+            }
+            const lastToken = input.slice(tokenStart);
+
+            if (bestMatch.toLowerCase().startsWith(lastToken.toLowerCase()) && bestMatch !== lastToken) {
               setInlineSuggestion(bestMatch);
             } else {
               setInlineSuggestion(null);
@@ -125,22 +141,90 @@ export const BlockInput: React.FC<BlockInputProps> = ({
     }
   }, []);
 
-  // Select a suggestion
-  const selectSuggestion = useCallback((suggestion: Suggestion) => {
-    setCommand(suggestion.text);
-    setShowSuggestions(false);
-    setSuggestions([]);
-    setInlineSuggestion(null);
-    inputRef.current?.focus();
-  }, []);
+  // Fetch history suggestions for ArrowUp dropdown.
+  // Uses getHistory with a prefix filter so matches are full-command based
+  // (e.g., typing "cd" returns "cd Documents", "cd /usr/local", etc.).
+  const fetchHistorySuggestions = useCallback(
+    async (input: string) => {
+      if (!input.trim()) return;
 
-  // Accept inline suggestion
+      try {
+        const entries = await window.terminalApi.getHistory(50, input.trim());
+        // Deduplicate and convert to Suggestion[]
+        const seen = new Set<string>();
+        const results: Suggestion[] = [];
+        for (const e of entries) {
+          const cmd = e.command;
+          if (!seen.has(cmd) && cmd !== input.trim()) {
+            seen.add(cmd);
+            results.push({ text: cmd, source: 'history', score: 1 });
+          }
+        }
+
+        setSuggestionSource('history');
+        setSuggestions(results);
+        setSelectedSuggestionIndex(0);
+        setShowSuggestions(results.length > 0);
+      } catch (err) {
+        console.warn('BlockInput: failed to fetch history suggestions', err);
+      }
+    },
+    []
+  );
+
+  // Select a suggestion.
+  // History items replace the entire command line (they're full commands).
+  // Tab items replace only the last token (filesystem/static completions).
+  const selectSuggestion = useCallback((suggestion: Suggestion) => {
+    if (suggestionSource === 'history') {
+      // History: replace entire input with the selected command
+      const newCommand = suggestion.text;
+      setCommand(newCommand);
+      setShowSuggestions(false);
+      setSuggestions([]);
+      setInlineSuggestion(null);
+      inputRef.current?.focus();
+      requestAnimationFrame(() => {
+        inputRef.current?.setSelectionRange(newCommand.length, newCommand.length);
+      });
+    } else {
+      // Tab (filesystem/static): replace only the token being completed
+      const cursorPos = inputRef.current?.selectionStart ?? command.length;
+      let start = cursorPos;
+      while (start > 0 && command[start - 1] !== ' ' && command[start - 1] !== '\t') {
+        start--;
+      }
+
+      const before = command.slice(0, start);
+      const after = command.slice(cursorPos);
+
+      const newCommand = before + suggestion.text + after;
+      setCommand(newCommand);
+      setShowSuggestions(false);
+      setSuggestions([]);
+      setInlineSuggestion(null);
+      inputRef.current?.focus();
+
+      requestAnimationFrame(() => {
+        const pos = before.length + suggestion.text.length;
+        inputRef.current?.setSelectionRange(pos, pos);
+      });
+    }
+  }, [command, suggestionSource]);
+
+  // Accept inline suggestion – replaces only the last token
   const acceptInlineSuggestion = useCallback(() => {
     if (inlineSuggestion) {
-      setCommand(inlineSuggestion);
+      let tokenStart = command.length;
+      while (tokenStart > 0 && command[tokenStart - 1] !== ' ' && command[tokenStart - 1] !== '\t') {
+        tokenStart--;
+      }
+      const before = command.slice(0, tokenStart);
+      const newCommand = before + inlineSuggestion;
+      setCommand(newCommand);
       setInlineSuggestion(null);
     }
-  }, [inlineSuggestion]);
+  }, [inlineSuggestion, command]);
 
   const handleKeyDown = useCallback(
     async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -214,18 +298,24 @@ export const BlockInput: React.FC<BlockInputProps> = ({
       if (!showSuggestions) {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          await loadHistory();
-          if (historyRef.current.length === 0) return;
-          if (historyIndexRef.current === -1) {
-            savedInputRef.current = command;
+          if (command.trim()) {
+            // Non-empty input → show filtered history dropdown
+            await fetchHistorySuggestions(command);
+          } else {
+            // Empty input → sequential history walk (classic shell behaviour)
+            await loadHistory();
+            if (historyRef.current.length === 0) return;
+            if (historyIndexRef.current === -1) {
+              savedInputRef.current = command;
+            }
+            const next = Math.min(
+              historyIndexRef.current + 1,
+              historyRef.current.length - 1
+            );
+            historyIndexRef.current = next;
+            setCommand(historyRef.current[next]);
+            setInlineSuggestion(null);
           }
-          const next = Math.min(
-            historyIndexRef.current + 1,
-            historyRef.current.length - 1
-          );
-          historyIndexRef.current = next;
-          setCommand(historyRef.current[next]);
-          setInlineSuggestion(null);
         } else if (e.key === 'ArrowDown') {
           e.preventDefault();
           if (historyIndexRef.current === -1) return;
@@ -249,6 +339,7 @@ export const BlockInput: React.FC<BlockInputProps> = ({
       inlineSuggestion,
       loadHistory,
       fetchSuggestions,
+      fetchHistorySuggestions,
       selectSuggestion,
       acceptInlineSuggestion,
     ]
@@ -282,10 +373,20 @@ export const BlockInput: React.FC<BlockInputProps> = ({
     }, 150);
   }, []);
 
-  // Calculate ghost text (portion after what user typed)
-  const ghostText = inlineSuggestion && inlineSuggestion.toLowerCase().startsWith(command.toLowerCase())
-    ? inlineSuggestion.slice(command.length)
-    : null;
+  // Calculate ghost text – the inline suggestion completes the last token,
+  // so the ghost is the portion of the suggestion after the current token.
+  const ghostText = (() => {
+    if (!inlineSuggestion) return null;
+    let tokenStart = command.length;
+    while (tokenStart > 0 && command[tokenStart - 1] !== ' ' && command[tokenStart - 1] !== '\t') {
+      tokenStart--;
+    }
+    const lastToken = command.slice(tokenStart);
+    if (inlineSuggestion.toLowerCase().startsWith(lastToken.toLowerCase()) && inlineSuggestion !== lastToken) {
+      return inlineSuggestion.slice(lastToken.length);
+    }
+    return null;
+  })();
 
   return (
     <div

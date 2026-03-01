@@ -34,6 +34,9 @@
   transition: border-left-color 0.15s ease;
   /* Prevent flex-shrink from squashing blocks instead of scrolling the parent */
   flex-shrink: 0;
+  /* Prevent horizontal overflow – block must stay within its parent */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .block-root:hover {
@@ -198,6 +201,9 @@
   font-size: 13px;
   line-height: 1.5;
   tab-size: 8;
+  /* Constrain to block width – long lines scroll inside instead of expanding */
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Scrollbar */

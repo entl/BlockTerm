@@ -3,7 +3,15 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { BackendStatus, HistoryEntry, Suggestion, SuggestionMode } from '../../shared/types';
+import type {
+  BackendStatus,
+  HistoryEntry,
+  Suggestion,
+  SuggestionMode,
+  SplitNode,
+  SplitBranch,
+  SplitDirection,
+} from '../../shared/types';
 
 /**
  * Hook for tracking backend connection status
@@ -233,34 +241,124 @@ export function useSuggestions(sessionId: string | null) {
 }
 
 /**
- * Hook for managing multiple terminal tabs
+ * Hook for managing multiple terminal tabs with split-pane layouts.
+ *
+ * Each tab owns a SplitNode tree.  Leaves are individual panes; branches
+ * represent horizontal or vertical splits.
  */
 export interface TabState {
   id: string;
   title: string;
-  sessionId: string | null;
+  /** Root of the split layout tree for this tab. */
+  layout: SplitNode;
+  /** Currently focused pane id within this tab. */
+  activePaneId: string;
 }
+
+/* ── Tree helpers (pure) ──────────────────────────────────────────────── */
+
+/** Create a fresh leaf node. */
+function makeLeaf(): { id: string; node: import('../../shared/types').SplitLeaf } {
+  const id = crypto.randomUUID();
+  return { id, node: { type: 'leaf', id, sessionId: null } };
+}
+
+/** Depth-first map: apply `fn` to every node and return a new tree. */
+function mapTree(node: SplitNode, fn: (n: SplitNode) => SplitNode): SplitNode {
+  const mapped = fn(node);
+  if (mapped.type === 'branch') {
+    return { ...mapped, children: mapped.children.map(c => mapTree(c, fn)) };
+  }
+  return mapped;
+}
+
+/** Find a node by id. */
+function findNode(node: SplitNode, id: string): SplitNode | null {
+  if (node.id === id) return node;
+  if (node.type === 'branch') {
+    for (const child of node.children) {
+      const found = findNode(child, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Collect all leaf ids in the tree. */
+function leafIds(node: SplitNode): string[] {
+  if (node.type === 'leaf') return [node.id];
+  return node.children.flatMap(leafIds);
+}
+
+/** Replace the subtree whose root has `targetId` with `replacement`. */
+function replaceNode(
+  root: SplitNode,
+  targetId: string,
+  replacement: SplitNode,
+): SplitNode {
+  if (root.id === targetId) return replacement;
+  if (root.type === 'branch') {
+    return {
+      ...root,
+      children: root.children.map(c => replaceNode(c, targetId, replacement)),
+    };
+  }
+  return root;
+}
+
+/** Remove a leaf and simplify the tree (collapse single-child branches). */
+function removeLeaf(root: SplitNode, leafId: string): SplitNode | null {
+  if (root.type === 'leaf') {
+    return root.id === leafId ? null : root;
+  }
+
+  const newChildren: SplitNode[] = [];
+  const newSizes: number[] = [];
+  const branch = root as SplitBranch;
+
+  for (let i = 0; i < branch.children.length; i++) {
+    const result = removeLeaf(branch.children[i], leafId);
+    if (result !== null) {
+      newChildren.push(result);
+      newSizes.push(branch.sizes[i]);
+    }
+  }
+
+  if (newChildren.length === 0) return null;
+  if (newChildren.length === 1) return newChildren[0]; // collapse
+
+  // Re-normalise sizes so they sum to 1
+  const total = newSizes.reduce((a, b) => a + b, 0);
+  const normSizes = newSizes.map(s => s / total);
+
+  return { ...branch, children: newChildren, sizes: normSizes };
+}
+
+/* ── Hook ─────────────────────────────────────────────────────────────── */
 
 export function useTerminalTabs() {
   const [tabs, setTabs] = useState<TabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
+  /* ── Tab-level actions ──────────────────────────────────────────────── */
+
   const addTab = useCallback((title: string = 'Terminal') => {
-    const id = crypto.randomUUID();
+    const tabId = crypto.randomUUID();
+    const leaf = makeLeaf();
     const newTab: TabState = {
-      id,
+      id: tabId,
       title,
-      sessionId: null,
+      layout: leaf.node,
+      activePaneId: leaf.id,
     };
     setTabs(prev => [...prev, newTab]);
-    setActiveTabId(id);
-    return id;
+    setActiveTabId(tabId);
+    return tabId;
   }, []);
 
   const removeTab = useCallback((tabId: string) => {
     setTabs(prev => {
       const filtered = prev.filter(t => t.id !== tabId);
-      // If we removed the active tab, activate another
       if (activeTabId === tabId && filtered.length > 0) {
         setActiveTabId(filtered[filtered.length - 1].id);
       } else if (filtered.length === 0) {
@@ -270,13 +368,136 @@ export function useTerminalTabs() {
     });
   }, [activeTabId]);
 
-  const updateTab = useCallback((tabId: string, updates: Partial<TabState>) => {
+  const updateTab = useCallback((tabId: string, updates: Partial<Omit<TabState, 'id'>>) => {
     setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, ...updates } : t)));
   }, []);
+
+  /* ── Pane-level actions ─────────────────────────────────────────────── */
+
+  /** Assign a session id to a leaf pane. */
+  const setPaneSession = useCallback((paneId: string, sessionId: string) => {
+    setTabs(prev =>
+      prev.map(tab => {
+        const node = findNode(tab.layout, paneId);
+        if (!node) return tab;
+        const newLayout = mapTree(tab.layout, n =>
+          n.id === paneId && n.type === 'leaf' ? { ...n, sessionId } : n,
+        );
+        return { ...tab, layout: newLayout };
+      }),
+    );
+  }, []);
+
+  /** Set the focused pane within a tab. */
+  const setActivePaneId = useCallback((paneId: string) => {
+    setTabs(prev =>
+      prev.map(tab => {
+        if (findNode(tab.layout, paneId)) {
+          return { ...tab, activePaneId: paneId };
+        }
+        return tab;
+      }),
+    );
+  }, []);
+
+  /** Split a leaf pane in the given direction. Returns the new pane id. */
+  const splitPane = useCallback(
+    (paneId: string, direction: SplitDirection): string | null => {
+      let newPaneId: string | null = null;
+
+      setTabs(prev =>
+        prev.map(tab => {
+          const target = findNode(tab.layout, paneId);
+          if (!target || target.type !== 'leaf') return tab;
+
+          const newLeaf = makeLeaf();
+          newPaneId = newLeaf.id;
+
+          const branch: SplitBranch = {
+            type: 'branch',
+            id: crypto.randomUUID(),
+            direction,
+            children: [target, newLeaf.node],
+            sizes: [0.5, 0.5],
+          };
+
+          const newLayout = replaceNode(tab.layout, paneId, branch);
+          return { ...tab, layout: newLayout, activePaneId: newLeaf.id };
+        }),
+      );
+
+      return newPaneId;
+    },
+    [],
+  );
+
+  /** Close a leaf pane (and its session). */
+  const closePane = useCallback(
+    (paneId: string) => {
+      setTabs(prev => {
+        return prev.map(tab => {
+          const node = findNode(tab.layout, paneId);
+          if (!node) return tab;
+
+          // Close the session if it has one
+          if (node.type === 'leaf' && node.sessionId) {
+            window.terminalApi.closeSession(node.sessionId).catch(console.error);
+          }
+
+          const newLayout = removeLeaf(tab.layout, paneId);
+
+          // If the entire tab is now empty, keep the tab but add a new leaf
+          if (!newLayout) {
+            const leaf = makeLeaf();
+            return { ...tab, layout: leaf.node, activePaneId: leaf.id };
+          }
+
+          // If the closed pane was active, pick another leaf
+          const leaves = leafIds(newLayout);
+          const newActive = leaves.includes(tab.activePaneId)
+            ? tab.activePaneId
+            : leaves[0];
+
+          return { ...tab, layout: newLayout, activePaneId: newActive };
+        });
+      });
+    },
+    [],
+  );
+
+  /** Update branch sizes after a resize drag. */
+  const resizeBranch = useCallback((branchId: string, sizes: number[]) => {
+    setTabs(prev =>
+      prev.map(tab => {
+        const node = findNode(tab.layout, branchId);
+        if (!node || node.type !== 'branch') return tab;
+        const newLayout = mapTree(tab.layout, n =>
+          n.id === branchId && n.type === 'branch' ? { ...n, sizes } : n,
+        );
+        return { ...tab, layout: newLayout };
+      }),
+    );
+  }, []);
+
+  /* ── Derived ────────────────────────────────────────────────────────── */
 
   const getActiveTab = useCallback(() => {
     return tabs.find(t => t.id === activeTabId) || null;
   }, [tabs, activeTabId]);
+
+  /** Get session ids for all leaves in a tab (for cleanup). */
+  const getTabSessionIds = useCallback(
+    (tabId: string): string[] => {
+      const tab = tabs.find(t => t.id === tabId);
+      if (!tab) return [];
+      const collectSessions = (node: SplitNode): string[] => {
+        if (node.type === 'leaf') return node.sessionId ? [node.sessionId] : [];
+        return node.children.flatMap(collectSessions);
+      };
+      return collectSessions(tab.layout);
+    },
+    [tabs],
+  );
 
   return {
     tabs,
@@ -286,5 +507,12 @@ export function useTerminalTabs() {
     removeTab,
     updateTab,
     setActiveTabId,
+    // Split-pane actions
+    setPaneSession,
+    setActivePaneId,
+    splitPane,
+    closePane,
+    resizeBranch,
+    getTabSessionIds,
   };
 }

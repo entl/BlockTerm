@@ -1,0 +1,65 @@
+/**
+ * SplitContainer – layout styles for split pane tree.
+ */
+
+/* ── Branch (flex container) ─────────────────────────────────────────────── */
+.split-branch {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.split-branch--horizontal {
+  flex-direction: row;
+}
+
+.split-branch--vertical {
+  flex-direction: column;
+}
+
+/* ── Child wrapper ───────────────────────────────────────────────────────── */
+.split-child {
+  overflow: hidden;
+  position: relative;
+  /* flex-shrink prevents collapsing below the percentage set via inline style */
+  flex-shrink: 0;
+  flex-grow: 0;
+}
+
+/* ── Resize handle ───────────────────────────────────────────────────────── */
+.split-handle {
+  flex-shrink: 0;
+  background: #2a2a2a;
+  transition: background 0.15s;
+  z-index: 5;
+}
+
+.split-handle:hover,
+.split-handle:active {
+  background: #4a9eff;
+}
+
+.split-handle--horizontal {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.split-handle--vertical {
+  height: 4px;
+  cursor: row-resize;
+}
+
+/* ── Leaf ────────────────────────────────────────────────────────────────── */
+.split-leaf {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.split-leaf--active {
+  border-color: #4a9eff;
+}

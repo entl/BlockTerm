@@ -78,6 +78,12 @@ func extractTokenAtCursor(input string, cursorPos int) string {
 		return ""
 	}
 
+	// If cursor is right after whitespace, we're at the start of a new (empty) token.
+	// e.g. "cd " with cursor at 3 → empty token (user hasn't typed the next word yet).
+	if isWhitespace(rune(input[cursorPos-1])) {
+		return ""
+	}
+
 	// Find token boundaries (split on whitespace)
 	start := cursorPos - 1
 	for start > 0 && !isWhitespace(rune(input[start-1])) {

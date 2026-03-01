@@ -6,15 +6,15 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Terminal, type TerminalRef } from '../Terminal';
 import { BlockTerminal } from '../BlockTerminal';
-import { Button } from '../ui/button';
 import { useCommandBuffer } from '../../hooks';
-import { Layout, Terminal as TerminalIcon } from 'lucide-react';
 import './TerminalPane.css';
 
 export interface TerminalPaneProps {
   tabId: string;
   sessionId: string | null;
   isActive: boolean;
+  /** Terminal display mode controlled by the parent (tab context menu). */
+  terminalMode?: 'plain' | 'block';
   onSessionCreate: (tabId: string, sessionId: string) => void;
   onTitleChange?: (title: string) => void;
 }
@@ -23,6 +23,7 @@ export function TerminalPane({
   tabId,
   sessionId,
   isActive,
+  terminalMode = 'block',
   onSessionCreate,
   onTitleChange,
 }: TerminalPaneProps) {
@@ -30,13 +31,12 @@ export function TerminalPane({
   const [isCreating, setIsCreating] = useState(false);
   const hasCreatedSession = useRef(false);
   const commandBuffer = useCommandBuffer();
-  
-  // Terminal mode state
-  const [terminalMode, setTerminalMode] = useState<'plain' | 'block'>('block');
 
-  // Create session when pane becomes active and no session exists
+  // Create session when pane mounts and no session exists.
+  // In a split layout every visible pane needs its own session,
+  // regardless of which pane is currently focused.
   useEffect(() => {
-    if (!sessionId && isActive && !isCreating && !hasCreatedSession.current) {
+    if (!sessionId && !isCreating && !hasCreatedSession.current) {
       const createSession = async () => {
         setIsCreating(true);
         hasCreatedSession.current = true;
@@ -63,7 +63,7 @@ export function TerminalPane({
 
       createSession();
     }
-  }, [sessionId, isActive, isCreating, tabId, onSessionCreate]);
+  }, [sessionId, isCreating, tabId, onSessionCreate]);
 
   // Reset flag when tabId changes
   useEffect(() => {
@@ -76,11 +76,13 @@ export function TerminalPane({
       terminalRef.current?.focus();
     }
   }, [isActive, terminalMode]);
-  
-  // Toggle between terminal modes
-  const toggleTerminalMode = useCallback(() => {
-    setTerminalMode(prev => prev === 'plain' ? 'block' : 'plain');
-  }, []);
+
+  // Re-fit xterm when switching to plain mode
+  useEffect(() => {
+    if (terminalMode === 'plain') {
+      requestAnimationFrame(() => terminalRef.current?.fit());
+    }
+  }, [terminalMode]);
 
   // Handle input from terminal
   const handleData = useCallback(
@@ -163,7 +165,7 @@ export function TerminalPane({
 
   return (
     <div
-      className={`terminal-pane ${isActive ? 'terminal-pane-active' : 'terminal-pane-hidden'}`}
+      className={`terminal-pane terminal-pane-active`}
     >
       {isCreating && (
         <div className="terminal-pane-loading">
@@ -171,8 +173,9 @@ export function TerminalPane({
         </div>
       )}
       
-      {/* Conditional rendering based on terminal mode */}
-      {terminalMode === 'plain' ? (
+      {/* Both views are always mounted so they share the same session and
+          keep their internal state.  CSS toggles which one is visible. */}
+      <div className={`terminal-pane-view${terminalMode === 'plain' ? ' terminal-pane-view--visible' : ''}`}>
         <Terminal
           ref={terminalRef}
           sessionId={sessionId}
@@ -180,28 +183,16 @@ export function TerminalPane({
           onResize={handleResize}
           onTitleChange={handleTitleChange}
         />
-      ) : (
+      </div>
+      <div className={`terminal-pane-view${terminalMode === 'block' ? ' terminal-pane-view--visible' : ''}`}>
         <BlockTerminal
           sessionId={sessionId}
           autoScroll={true}
           showInput={true}
         />
-      )}
-      
-      {/* Mode toggle button - bottom right corner */}
-      <Button
-        variant="outline"
-        size="icon"
-        className="terminal-mode-toggle"
-        onClick={toggleTerminalMode}
-        aria-label={`Switch to ${terminalMode === 'plain' ? 'block' : 'plain'} terminal`}
-        title={`Switch to ${terminalMode === 'plain' ? 'block' : 'plain'} terminal`}
-      >
-        {terminalMode === 'plain' ? <Layout className="w-4 h-4" /> : <TerminalIcon className="w-4 h-4" />}
-      </Button>
+      </div>
     </div>
   );
 }
 
 export default TerminalPane;
-

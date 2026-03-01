@@ -91,6 +91,28 @@ export interface WorkspaceLayout {
   activeTabId: string;
 }
 
+// Split pane layout types
+export type SplitDirection = 'horizontal' | 'vertical';
+
+/** Leaf node – a single terminal pane. */
+export interface SplitLeaf {
+  type: 'leaf';
+  id: string;           // unique pane id
+  sessionId: string | null;
+}
+
+/** Branch node – two or more children laid out in a direction. */
+export interface SplitBranch {
+  type: 'branch';
+  id: string;
+  direction: SplitDirection;
+  children: SplitNode[];
+  /** Relative sizes for each child (sum = 1). */
+  sizes: number[];
+}
+
+export type SplitNode = SplitLeaf | SplitBranch;
+
 // Unsubscribe function type
 export type UnsubscribeFn = () => void;
 

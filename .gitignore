@@ -181,3 +181,6 @@ bin/
 
 *stories/
 *stories*
+
+.github/instructions/
+.github/copilot*

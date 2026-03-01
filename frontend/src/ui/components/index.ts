@@ -13,6 +13,9 @@ export type { SearchBarProps, SearchMatch } from './SearchBar';
 export { SuggestionDropdown } from './SuggestionDropdown';
 export type { SuggestionDropdownProps } from './SuggestionDropdown';
 
+export { SplitContainer } from './SplitContainer';
+export type { SplitContainerProps } from './SplitContainer';
+
 export { StatusBar } from './StatusBar';
 export type { StatusBarProps } from './StatusBar';
 

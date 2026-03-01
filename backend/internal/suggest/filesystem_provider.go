@@ -30,16 +30,43 @@ func (p *FilesystemProvider) Name() string {
 
 // GetSuggestions returns filesystem suggestions based on input token.
 func (p *FilesystemProvider) GetSuggestions(ctx context.Context, input string, cursorPos int, sessionID string) ([]*pb.Suggestion, error) {
-	if input == "" {
-		return nil, nil
-	}
-
 	// Get current working directory from session
 	cwd := homeDir()
 	if sessionID != "" {
 		if sess, err := p.sessionMgr.GetSession(sessionID); err == nil {
 			cwd = sess.Cwd
 		}
+	}
+
+	// When input is empty, list the current directory (like real terminal Tab).
+	if input == "" {
+		entries, err := os.ReadDir(cwd)
+		if err != nil {
+			return nil, nil
+		}
+
+		var suggestions []*pb.Suggestion
+		for _, entry := range entries {
+			name := entry.Name()
+			// Skip hidden files when listing everything
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			completionText := name
+			if entry.IsDir() {
+				completionText += "/"
+			}
+			score := calculateFilesystemScore(name, "", entry.IsDir())
+			suggestions = append(suggestions, &pb.Suggestion{
+				Text:   completionText,
+				Source: "filesystem",
+				Score:  score,
+			})
+		}
+		if len(suggestions) > 30 {
+			suggestions = suggestions[:30]
+		}
+		return suggestions, nil
 	}
 
 	// Determine the path to complete
