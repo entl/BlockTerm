@@ -12,10 +12,11 @@
  * processes every PTY byte from the start — it is never recreated.
  */
 
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { Block } from '../Block';
 import { BlockInput } from '../BlockInput';
 import { Terminal, type TerminalRef } from '../Terminal';
+import { SearchBar, type SearchMatch } from '../SearchBar';
 import { useBlocks } from '../../hooks';
 import './BlockTerminal.css';
 
@@ -38,93 +39,21 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
   const xtermRef = useRef<TerminalRef>(null);
   // True when the user has deliberately scrolled upward.
   const userScrolledUpRef = useRef(false);
+  
+  // Block selection state
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+
+  // Search state
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatchCase, setSearchMatchCase] = useState(false);
+  const [searchRegex, setSearchRegex] = useState(false);
+  const [searchScope, setSearchScope] = useState<'current' | 'all'>('all');
+  const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   // True while we are programmatically setting scrollTop so the scroll
   // listener does not misinterpret our own scroll events as user intent.
   const isProgrammaticScrollRef = useRef(false);
-
-  // ── Block-mode column measurement ──────────────────────────────────────
-  // In block mode the <pre class="block-output"> area is narrower than the
-  // full-width xterm overlay because of padding / border / scrollbar.  We
-  // measure the *actual* text area width in characters and resize the PTY
-  // to match, so commands like `ls` produce the right number of columns.
-  //
-  // We use a DOM "ruler" that replicates the exact CSS structure of a real
-  // block output element, so the measurement is immune to padding / border
-  // / scrollbar / font changes.
-  const blockColsRef = useRef<number>(0); // 0 = never measured yet
-
-  /**
-   * Measure how many monospace characters fit in the block output area by
-   * temporarily inserting a hidden replica of the block DOM structure.
-   */
-  const measureBlockCols = useCallback((container: HTMLElement): number => {
-    // Build: .block-root > .block-output-wrap > pre.block-output > span
-    const root = document.createElement('div');
-    root.className = 'block-root';
-    root.style.cssText = 'height:0;overflow:hidden;visibility:hidden;pointer-events:none';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'block-output-wrap';
-
-    const pre = document.createElement('pre');
-    pre.className = 'block-output';
-    // Force a vertical scrollbar so the measurement reflects the worst case
-    // (real output that exceeds max-height).
-    pre.style.overflowY = 'scroll';
-
-    const ruler = document.createElement('span');
-    ruler.textContent = 'X'.repeat(200);
-
-    pre.appendChild(ruler);
-    wrap.appendChild(pre);
-    root.appendChild(wrap);
-    container.appendChild(root);
-
-    const charWidth = ruler.getBoundingClientRect().width / 200;
-    const style = getComputedStyle(pre);
-    const padL = parseFloat(style.paddingLeft) || 0;
-    const padR = parseFloat(style.paddingRight) || 0;
-    // clientWidth includes padding but excludes the scrollbar
-    const availableWidth = pre.clientWidth - padL - padR;
-    const cols = charWidth > 0 ? Math.max(40, Math.floor(availableWidth / charWidth)) : 80;
-
-    container.removeChild(root);
-    return cols;
-  }, []);
-
-  // ResizeObserver: keep PTY cols in sync with the block output area.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const syncCols = () => {
-      if (isFullscreen) return;
-
-      const cols = measureBlockCols(el);
-
-      if (cols !== blockColsRef.current) {
-        // Only commit the ref value when we actually send the resize.
-        // This prevents the mount-time measurement (sessionId=null) from
-        // "using up" the change and silently skipping the first real resize.
-        if (sessionId) {
-          blockColsRef.current = cols;
-          const rows = xtermRef.current?.terminal?.rows ?? 24;
-          window.terminalApi
-            .resizeSession(sessionId, cols, rows)
-            .catch(console.error);
-        }
-      }
-    };
-
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(syncCols);
-    });
-    observer.observe(el);
-    // Run immediately so we pick up the right cols before the first command.
-    syncCols();
-
-    return () => observer.disconnect();
-  }, [sessionId, isFullscreen, measureBlockCols]);
 
   // The xterm fires its initial fitAddon.fit() / onResize while sessionId is
   // still null, so the resize is dropped. Re-fit once a session is connected
@@ -190,6 +119,134 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
     }
   }, [isFullscreen]);
 
+  // Click handler: select / deselect a block
+  const handleBlockClick = useCallback((blockId: string) => {
+    setSelectedBlockId(prev => prev === blockId ? null : blockId);
+  }, []);
+
+  // Keep a ref to blockData so the search callback can always read the
+  // latest data without having blockData as a dependency (which would
+  // recreate the callback on every output chunk → re-trigger search →
+  // reset currentSearchIndex to 0).
+  const blockDataRef = useRef(blockData);
+  blockDataRef.current = blockData;
+
+  // Search functionality
+  const handleSearch = useCallback(
+    (query: string, matchCase: boolean, regex: boolean): SearchMatch[] => {
+      setSearchQuery(query);
+      setSearchMatchCase(matchCase);
+      setSearchRegex(regex);
+
+      if (!query) {
+        setSearchMatches([]);
+        setCurrentSearchIndex(0);
+        return [];
+      }
+
+      const matches: SearchMatch[] = [];
+      let pattern: RegExp;
+
+      try {
+        if (regex) {
+          pattern = new RegExp(query, matchCase ? 'g' : 'gi');
+        } else {
+          const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          pattern = new RegExp(escaped, matchCase ? 'g' : 'gi');
+        }
+
+        // Read latest block data from ref (not a dep → no cascade)
+        const currentBlockData = blockDataRef.current;
+
+        // Filter blocks by scope
+        const searchBlocks = searchScope === 'current' && selectedBlockId
+          ? currentBlockData.filter(item => item.block.id === selectedBlockId)
+          : currentBlockData;
+
+        searchBlocks.forEach((item) => {
+          // Search in command text
+          if (item.command) {
+            let match;
+            pattern.lastIndex = 0;
+            while ((match = pattern.exec(item.command)) !== null) {
+              matches.push({
+                blockId: item.block.id,
+                area: 'command',
+                index: match.index,
+                length: match[0].length,
+                line: 0,
+                preview: item.command,
+              });
+            }
+          }
+
+          // Search in output text — count every occurrence so the
+          // index aligns with how Block.tsx highlights matches.
+          if (item.output) {
+            const lines = item.output.split('\n');
+            lines.forEach((line, lineIndex) => {
+              let match;
+              pattern.lastIndex = 0;
+              while ((match = pattern.exec(line)) !== null) {
+                matches.push({
+                  blockId: item.block.id,
+                  area: 'output',
+                  index: match.index,
+                  length: match[0].length,
+                  line: lineIndex,
+                  preview: line.slice(Math.max(0, match.index - 20), match.index + match[0].length + 20),
+                });
+              }
+            });
+          }
+        });
+
+        setSearchMatches(matches);
+        setCurrentSearchIndex(matches.length > 0 ? 0 : -1);
+        return matches;
+      } catch (err) {
+        // Invalid regex
+        setSearchMatches([]);
+        setCurrentSearchIndex(0);
+        return [];
+      }
+    },
+    [searchScope, selectedBlockId]
+  );
+
+  const handleSearchNavigate = useCallback(
+    (direction: 'next' | 'prev') => {
+      if (searchMatches.length === 0) return;
+
+      const newIndex = direction === 'next'
+        ? (currentSearchIndex + 1) % searchMatches.length
+        : (currentSearchIndex - 1 + searchMatches.length) % searchMatches.length;
+
+      setCurrentSearchIndex(newIndex);
+
+      // Scroll the matching block into view
+      const match = searchMatches[newIndex];
+      if (match) {
+        const blockEl = document.querySelector(`[data-block-id="${match.blockId}"]`);
+        blockEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    },
+    [searchMatches, currentSearchIndex]
+  );
+
+  // Keyboard shortcut for search (Ctrl/Cmd+F)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setSearchVisible((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleCommand = useCallback(
     (command: string) => {
       if (!sessionId) return;
@@ -208,18 +265,28 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
 
   const handleXtermResize = useCallback(
     (cols: number, rows: number) => {
-      // In fullscreen (TUI) mode the xterm dimensions are authoritative.
-      // In block mode the ResizeObserver-based measurement below drives
-      // the PTY cols so commands like `ls` format for the visible width.
-      if (sessionId && isFullscreen) {
-        window.terminalApi.resizeSession(sessionId, cols, rows).catch(console.error);
-      }
+      if (sessionId) window.terminalApi.resizeSession(sessionId, cols, rows).catch(console.error);
     },
-    [sessionId, isFullscreen],
+    [sessionId],
   );
+
+  // Get current search query for highlighting
+  const currentSearchMatch = searchMatches[currentSearchIndex];
 
   return (
     <div className="block-terminal-container">
+      {/* Search bar */}
+      <SearchBar
+        visible={searchVisible && !isFullscreen}
+        onClose={() => setSearchVisible(false)}
+        onSearch={handleSearch}
+        totalMatches={searchMatches.length}
+        currentMatchIndex={currentSearchIndex}
+        onNavigate={handleSearchNavigate}
+        scope={searchScope}
+        onScopeChange={(s) => setSearchScope(s)}
+      />
+
       {/*
        * xterm.js instance — always mounted so it processes every byte.
        * Hidden via CSS when not in fullscreen; revealed as an overlay when
@@ -246,17 +313,39 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
         }`}
         ref={containerRef}
       >
-        {blockData.map(item => (
-          <Block
-            key={item.block.id}
-            block={item.block}
-            path={item.path}
-            command={item.command}
-            output={item.output}
-            exitCode={item.exitCode}
-            onRerun={() => handleCommand(item.command)}
-          />
-        ))}
+        {blockData.map((item, idx) => {
+          // Calculate match index for this block, separately for command & output
+          const blockCommandMatches = searchMatches.filter(m => m.blockId === item.block.id && m.area === 'command');
+          const blockOutputMatches = searchMatches.filter(m => m.blockId === item.block.id && m.area === 'output');
+          const commandMatchIndex = blockCommandMatches.length > 0 && currentSearchMatch?.blockId === item.block.id && currentSearchMatch?.area === 'command'
+            ? blockCommandMatches.indexOf(currentSearchMatch)
+            : -1;
+          const outputMatchIndex = blockOutputMatches.length > 0 && currentSearchMatch?.blockId === item.block.id && currentSearchMatch?.area === 'output'
+            ? blockOutputMatches.indexOf(currentSearchMatch)
+            : -1;
+
+          // Only show highlights on blocks that are in search scope
+          const inSearchScope = searchScope === 'all' || item.block.id === selectedBlockId;
+
+          return (
+            <Block
+              key={item.block.id}
+              block={item.block}
+              path={item.path}
+              command={item.command}
+              output={item.output}
+              exitCode={item.exitCode}
+              onRerun={() => handleCommand(item.command)}
+              selected={selectedBlockId === item.block.id}
+              onClick={() => handleBlockClick(item.block.id)}
+              searchQuery={searchVisible && inSearchScope ? searchQuery : undefined}
+              searchMatchCase={searchMatchCase}
+              searchRegex={searchRegex}
+              currentCommandMatchIndex={commandMatchIndex}
+              currentOutputMatchIndex={outputMatchIndex}
+            />
+          );
+        })}
 
         {blockData.length === 0 && (
           <div className="block-terminal-empty">

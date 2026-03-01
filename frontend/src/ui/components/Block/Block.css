@@ -6,6 +6,18 @@
  * a slightly indented pre.
  */
 
+/* ── Search highlight styles ─────────────────────────────────────────────── */
+.search-highlight {
+  background-color: rgba(255, 215, 0, 0.3);
+  padding: 1px 0;
+}
+
+.search-highlight-current {
+  background-color: rgba(255, 165, 0, 0.5);
+  outline: 1px solid #ffa500;
+  padding: 1px 0;
+}
+
 /* ── Root container ──────────────────────────────────────────────────────── */
 .block-root {
   position: relative;
@@ -27,6 +39,16 @@
 .block-root:hover {
   border-color: #3a3a3a;
   border-left-color: #4a9eff;
+  cursor: pointer;
+}
+
+/* Selected block */
+.block-root--selected {
+  border-left-color: #4a9eff !important;
+  background: #1e2230;
+}
+.block-root--selected .block-cmd-row {
+  background: #1e2433;
 }
 
 /* Error blocks get a red accent */

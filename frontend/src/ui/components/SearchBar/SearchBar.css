@@ -1,0 +1,141 @@
+/**
+ * SearchBar – VS Code-style search overlay for BlockTerminal.
+ *
+ * Sits fixed at the top of the terminal container. Dark theme matching
+ * the rest of the terminal UI.
+ */
+
+/* ── Container ───────────────────────────────────────────────────────────── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #333;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco,
+    'Courier New', monospace;
+  font-size: 12px;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+/* ── Search icon ─────────────────────────────────────────────────────────── */
+.search-bar-icon {
+  display: flex;
+  align-items: center;
+  color: #666;
+  flex-shrink: 0;
+}
+
+/* ── Text input ──────────────────────────────────────────────────────────── */
+.search-bar-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 8px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-bar-input:focus {
+  border-color: #4a9eff;
+}
+
+.search-bar-input::placeholder {
+  color: #555;
+}
+
+/* ── Match counter ───────────────────────────────────────────────────────── */
+.search-bar-matches {
+  color: #888;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 70px;
+  text-align: center;
+}
+
+/* ── Controls wrapper ────────────────────────────────────────────────────── */
+.search-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Generic button ──────────────────────────────────────────────────────── */
+.search-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #888;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.search-bar-btn:hover {
+  background: #2e2e2e;
+  color: #ccc;
+}
+
+.search-bar-btn:disabled {
+  color: #444;
+  cursor: default;
+}
+
+.search-bar-btn:disabled:hover {
+  background: none;
+}
+
+/* Active toggle state (match-case / regex) */
+.search-bar-btn[data-active='true'] {
+  background: #333;
+  color: #4a9eff;
+  border-color: #4a9eff;
+}
+
+/* ── Scope select ────────────────────────────────────────────────────────── */
+.search-bar-scope {
+  padding: 3px 6px;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #b0b8c4;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-bar-scope:focus {
+  border-color: #4a9eff;
+}
+
+.search-bar-scope option {
+  background: #1e1e1e;
+  color: #b0b8c4;
+}
+
+/* ── Close button ────────────────────────────────────────────────────────── */
+.search-bar-close {
+  margin-left: 4px;
+}
+
+.search-bar-close:hover {
+  color: #f87171;
+}

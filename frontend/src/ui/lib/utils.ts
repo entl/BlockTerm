@@ -39,9 +39,7 @@ export function findTrailingPartialEscape(s: string): number {
 
 /**
  * Clean terminal output by removing ANSI/VT100 control sequences, normalising
- * line endings, and handling backspaces.  Deliberately does NOT strip trailing
- * spaces from individual lines — they carry column-alignment information (e.g.
- * `ls` output).
+ * line endings, and handling backspaces.
  */
 export function cleanTerminalOutput(raw: string): string {
   let s = raw
@@ -67,6 +65,14 @@ export function cleanTerminalOutput(raw: string): string {
   }
   s = out.join('');
 
-  // Trim only leading/trailing blank lines, not internal content
-  return s.replace(/^\n+/, '').replace(/\n+$/, '');
+  // Trim trailing whitespace from each line (artifacts from line clears)
+  // and trim leading/trailing blank lines from the overall output
+  s = s
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '');
+
+  return s;
 }

@@ -12,6 +12,7 @@
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, monospace;
   font-size: 13px;
   cursor: text;
+  position: relative;
 }
 
 .block-input-path {
@@ -31,8 +32,16 @@
 .block-input-form {
   flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   min-width: 0;
+  position: relative;
+}
+
+.block-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .block-input-field {
@@ -49,8 +58,27 @@
   min-height: unset;
   caret-color: #4a9eff;
   line-height: 1.5;
+  position: relative;
+  z-index: 1;
 }
 
 .block-input-field::placeholder {
   color: #333;
+}
+
+/* Ghost text overlay for inline suggestions */
+.block-input-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  color: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.block-input-ghost .ghost-text {
+  color: #555;
 }

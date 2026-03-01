@@ -54,10 +54,21 @@ func main() {
 	}
 	historySvc := history.NewService(db)
 
-	// Initialize services
-	staticSuggestions := suggest.NewStaticProvider()
-	suggestionService := suggest.NewSuggestionService(staticSuggestions)
-	sessionService := session.NewService(session.NewManager())
+	// Initialize session manager
+	sessionMgr := session.NewManager()
+
+	// Initialize suggestion providers
+	staticProvider := suggest.NewStaticProvider()
+	historyProvider := suggest.NewHistoryProvider(historySvc)
+	filesystemProvider := suggest.NewFilesystemProvider(sessionMgr)
+
+	// Initialize services with all providers
+	suggestionService := suggest.NewSuggestionService(
+		historyProvider,    // History matches (highest priority)
+		filesystemProvider, // Filesystem completions
+		staticProvider,     // Static command suggestions (lowest priority)
+	)
+	sessionService := session.NewService(sessionMgr)
 	systemService := system.New(version, build)
 
 	// Register gRPC service implementations

@@ -11,7 +11,7 @@
  * discarded. Each block's `output` contains only the text between them.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Block } from '../../shared/types';
 import { cleanTerminalOutput, findTrailingPartialEscape } from '../lib/utils';
 
@@ -291,13 +291,16 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
   }, []);
 
   /** Derived view: each block paired with its marker-trimmed output text. */
-  const blockData: BlockData[] = blocks.map(block => ({
-    block,
-    path: block.cwd,
-    command: block.command,
-    output: blockContents.get(block.id) ?? '',
-    exitCode: block.exitCode,
-  }));
+  const blockData: BlockData[] = useMemo(
+    () => blocks.map(block => ({
+      block,
+      path: block.cwd,
+      command: block.command,
+      output: blockContents.get(block.id) ?? '',
+      exitCode: block.exitCode,
+    })),
+    [blocks, blockContents],
+  );
 
   return { blocks, blockData, isFullscreen, currentCwd, addBlock, toggleCollapse };
 }

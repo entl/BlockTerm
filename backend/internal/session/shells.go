@@ -53,6 +53,8 @@ __blockterm_preexec() {
 # For zsh
 if [[ -n "${ZSH_VERSION}" ]]; then
   [[ -f ~/.zshrc ]] && source ~/.zshrc
+  # Disable the % indicator for commands without trailing newline
+  unsetopt PROMPT_SP
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd  __blockterm_precmd
   add-zsh-hook preexec __blockterm_preexec

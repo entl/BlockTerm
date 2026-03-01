@@ -15,6 +15,13 @@ export interface BlockProps {
   output: string;
   exitCode: number | null;
   onRerun?: () => void;
+  selected?: boolean;
+  onClick?: () => void;
+  searchQuery?: string;
+  searchMatchCase?: boolean;
+  searchRegex?: boolean;
+  currentCommandMatchIndex?: number;
+  currentOutputMatchIndex?: number;
 }
 
 export const Block: React.FC<BlockProps> = ({
@@ -24,6 +31,13 @@ export const Block: React.FC<BlockProps> = ({
   output,
   exitCode,
   onRerun,
+  selected = false,
+  onClick,
+  searchQuery,
+  searchMatchCase = false,
+  searchRegex = false,
+  currentCommandMatchIndex = -1,
+  currentOutputMatchIndex = -1,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(block.collapsed || false);
   const [copied, setCopied] = useState<'command' | 'output' | 'block' | null>(null);
@@ -43,12 +57,53 @@ export const Block: React.FC<BlockProps> = ({
 
   const hasOutput = !!output;
 
+  // Build search pattern once for reuse
+  const searchPattern = React.useMemo(() => {
+    if (!searchQuery) return null;
+    try {
+      if (searchRegex) {
+        return new RegExp(searchQuery, searchMatchCase ? 'g' : 'gi');
+      } else {
+        const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(escaped, searchMatchCase ? 'g' : 'gi');
+      }
+    } catch {
+      return null;
+    }
+  }, [searchQuery, searchMatchCase, searchRegex]);
+
+  // Highlight search matches in command
+  const highlightedCommand = React.useMemo(() => {
+    if (!searchPattern || !command) return null;
+    let matchIndex = 0;
+    const result = command.replace(searchPattern, (match) => {
+      const isCurrent = matchIndex === currentCommandMatchIndex;
+      matchIndex++;
+      return `<mark class="${isCurrent ? 'search-highlight-current' : 'search-highlight'}">${match}</mark>`;
+    });
+    return result !== command ? result : null;
+  }, [command, searchPattern, currentCommandMatchIndex]);
+
+  // Highlight search matches in output
+  const highlightedOutput = React.useMemo(() => {
+    if (!searchPattern || !output) return output;
+    let matchIndex = 0;
+    const result = output.replace(searchPattern, (match) => {
+      const isCurrent = matchIndex === currentOutputMatchIndex;
+      matchIndex++;
+      return `<mark class="${isCurrent ? 'search-highlight-current' : 'search-highlight'}">${match}</mark>`;
+    });
+    return result;
+  }, [output, searchPattern, currentOutputMatchIndex]);
+
   return (
     <div
       className={`block-root${
         exitCode !== null && exitCode !== 0 ? ' block-root--error' : ''
-      }`}
+      }${selected ? ' block-root--selected' : ''}`}
       data-collapsed={isCollapsed}
+      data-block-id={block.id}
+      onClick={onClick}
     >
       {/* ── Command row ─────────────────────────────────────── */}
       <div className="block-cmd-row">
@@ -68,7 +123,10 @@ export const Block: React.FC<BlockProps> = ({
 
         <span className="block-path">{path}</span>
         <span className="block-prompt">❯</span>
-        <span className="block-command">{command || <em className="block-command--empty">no command</em>}</span>
+        {highlightedCommand
+          ? <span className="block-command" dangerouslySetInnerHTML={{ __html: highlightedCommand }} />
+          : <span className="block-command">{command || <em className="block-command--empty">no command</em>}</span>
+        }
 
         {/* Right: timestamp + actions (visible on row hover) */}
         <span className="block-timestamp">
@@ -98,7 +156,10 @@ export const Block: React.FC<BlockProps> = ({
       {/* ── Output area ──────────────────────────────────────── */}
       {hasOutput && !isCollapsed && (
         <div className="block-output-wrap">
-          <pre className="block-output">{output}</pre>
+          <pre 
+            className="block-output"
+            dangerouslySetInnerHTML={{ __html: highlightedOutput }}
+          />
           <button
             className="block-copy-output-btn"
             onClick={() => copy(output, 'output')}
