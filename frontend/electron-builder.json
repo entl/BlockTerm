@@ -9,7 +9,6 @@
         "dist-electron"
     ],
     "icon": "./desktopIcon.png",
-    "publish": "never",
     "extraResources": [
         {
             "from": "../proto",
