@@ -10,6 +10,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # macOS – builds the arm64 DMG (Apple Silicon)
@@ -51,8 +54,6 @@ jobs:
       - name: Build Electron app (mac)
         working-directory: frontend
         run: npm run dist:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -103,8 +104,6 @@ jobs:
       - name: Build Electron app (linux)
         working-directory: frontend
         run: npm run dist:linux
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -155,8 +154,6 @@ jobs:
       - name: Build Electron app (win)
         working-directory: frontend
         run: npm run dist:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
