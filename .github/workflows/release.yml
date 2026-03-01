@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Only one release run at a time per tag
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # macOS – builds the arm64 DMG (Apple Silicon)
+  # electron-builder requires a native macOS runner for DMG signing/notarisation
+  # ────────────────────────────────────────────────────────────────────────────
+  build-mac:
+    name: Build · macOS (arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Go backend (darwin/arm64)
+        working-directory: backend
+        run: |
+          GOOS=darwin GOARCH=arm64 go build \
+            -ldflags "-X main.version=${{ github.ref_name }} -X main.build=${{ github.sha }}" \
+            -o ../frontend/resources/backend/server \
+            ./cmd/server
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Electron app (mac)
+        working-directory: frontend
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: frontend/dist/*.dmg
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Linux – builds the x64 AppImage
+  # ────────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: Build · Linux (x64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Go backend (linux/amd64)
+        working-directory: backend
+        run: |
+          GOOS=linux GOARCH=amd64 go build \
+            -ldflags "-X main.version=${{ github.ref_name }} -X main.build=${{ github.sha }}" \
+            -o ../frontend/resources/backend/server \
+            ./cmd/server
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Linux build dependencies
+        run: sudo apt-get install -y rpm fakeroot
+
+      - name: Build Electron app (linux)
+        working-directory: frontend
+        run: npm run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: frontend/dist/*.AppImage
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Windows – builds the x64 portable exe + MSI
+  # ────────────────────────────────────────────────────────────────────────────
+  build-win:
+    name: Build · Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Go backend (windows/amd64)
+        working-directory: backend
+        shell: pwsh
+        run: |
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          go build `
+            -ldflags "-X main.version=${{ github.ref_name }} -X main.build=${{ github.sha }}" `
+            -o ../frontend/resources/backend/server.exe `
+            ./cmd/server
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Electron app (win)
+        working-directory: frontend
+        run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-installer
+          path: |
+            frontend/dist/*.exe
+            frontend/dist/*.msi
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Publish – collects all artifacts and creates the GitHub Release
+  # Runs only after all three build jobs succeed
+  # ────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: [build-mac, build-linux, build-win]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true
+          # Mark as pre-release if tag contains a pre-release suffix
+          # e.g. v1.0.0-beta.1 → pre-release; v1.0.0 → full release
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

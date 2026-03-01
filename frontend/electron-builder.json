@@ -1,10 +1,15 @@
 {
     "appId": "com.maksym-vorobyov.blockterm",
+    "productName": "BlockTerm",
+    "directories": {
+        "output": "dist"
+    },
     "files": [
         "dist-react",
         "dist-electron"
     ],
     "icon": "./desktopIcon.png",
+    "publish": "never",
     "extraResources": [
         {
             "from": "../proto",
