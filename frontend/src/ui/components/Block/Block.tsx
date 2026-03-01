@@ -55,8 +55,6 @@ export const Block: React.FC<BlockProps> = ({
     return <XCircle className="block-status-icon block-status-err" />;
   };
 
-  const hasOutput = !!output;
-
   // Build search pattern once for reuse
   const searchPattern = React.useMemo(() => {
     if (!searchQuery) return null;
@@ -84,17 +82,22 @@ export const Block: React.FC<BlockProps> = ({
     return result !== command ? result : null;
   }, [command, searchPattern, currentCommandMatchIndex]);
 
-  // Highlight search matches in output
+  // Trim leading/trailing blank lines from the fully-assembled output.
+  // This must happen here (display time) rather than per streaming chunk so
+  // that newlines acting as chunk separators are not prematurely stripped.
   const highlightedOutput = React.useMemo(() => {
-    if (!searchPattern || !output) return output;
+    const trimmed = output.replace(/^\n+/, '').replace(/\n+$/, '');
+    if (!searchPattern || !trimmed) return trimmed;
     let matchIndex = 0;
-    const result = output.replace(searchPattern, (match) => {
+    const result = trimmed.replace(searchPattern, (match) => {
       const isCurrent = matchIndex === currentOutputMatchIndex;
       matchIndex++;
       return `<mark class="${isCurrent ? 'search-highlight-current' : 'search-highlight'}">${match}</mark>`;
     });
     return result;
   }, [output, searchPattern, currentOutputMatchIndex]);
+
+  const hasOutput = !!highlightedOutput;
 
   return (
     <div

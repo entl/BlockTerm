@@ -91,6 +91,10 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
   const inBlockRef = useRef(false);                     // between START and END?
   const fragmentRef = useRef('');                       // partial marker from previous chunk
   const rawBufferRef = useRef('');                      // partial ANSI escape from previous chunk
+  // True while we are between a START and END marker (command is executing).
+  // Exposed so callers can route user input directly to the PTY instead of
+  // creating a new block (e.g. when a command asks for credentials).
+  const [isCommandRunning, setIsCommandRunning] = useState(false);
 
   // Reset parser state when the session changes
   useEffect(() => {
@@ -105,6 +109,7 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
     setBlockContents(new Map());
     setCurrentCwd(currentPath);
     setIsFullscreen(false);
+    setIsCommandRunning(false);
   }, [sessionId]);
 
   // ── Output subscription ───────────────────────────────────────────────────
@@ -186,6 +191,7 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
           }
 
           inBlockRef.current = true;
+          setIsCommandRunning(true);
           pos = startIdx + MARKER_START.length;
 
         } else {
@@ -234,6 +240,7 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
           activeBlockIdRef.current = null;
           activeBlockCommandRef.current = '';
           inBlockRef.current = false;
+          setIsCommandRunning(false);
           pos += endMarkerOffset + endMatch[0].length;
         }
       }
@@ -302,5 +309,5 @@ export function useBlocks({ sessionId, currentPath = '~' }: UseBlocksOptions) {
     [blocks, blockContents],
   );
 
-  return { blocks, blockData, isFullscreen, currentCwd, addBlock, toggleCollapse };
+  return { blocks, blockData, isFullscreen, currentCwd, isCommandRunning, addBlock, toggleCollapse };
 }

@@ -18,6 +18,8 @@ export interface BlockInputProps {
   sessionId?: string | null;
   onSubmit?: (command: string) => void;
   placeholder?: string;
+  /** When true a command is already running and input bypasses block creation. */
+  isPassthrough?: boolean;
 }
 
 export const BlockInput: React.FC<BlockInputProps> = ({
@@ -25,6 +27,7 @@ export const BlockInput: React.FC<BlockInputProps> = ({
   sessionId,
   onSubmit,
   placeholder = 'type a command…',
+  isPassthrough = false,
 }) => {
   const [command, setCommand] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -393,8 +396,8 @@ export const BlockInput: React.FC<BlockInputProps> = ({
       className="block-input-container"
       onClick={() => inputRef.current?.focus()}
     >
-      <span className="block-input-path">{currentPath}</span>
-      <span className="block-input-prompt">❯</span>
+      {!isPassthrough && <span className="block-input-path">{currentPath}</span>}
+      <span className="block-input-prompt">{isPassthrough ? '↳' : '❯'}</span>
       <form onSubmit={handleSubmit} className="block-input-form">
         <div className="block-input-wrapper">
           <input
@@ -404,7 +407,7 @@ export const BlockInput: React.FC<BlockInputProps> = ({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
-            placeholder={placeholder}
+            placeholder={isPassthrough ? 'respond to prompt…' : placeholder}
             className="block-input-field"
             autoFocus
             spellCheck={false}

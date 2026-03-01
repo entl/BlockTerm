@@ -33,7 +33,7 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
   autoScroll = true,
   showInput = true,
 }) => {
-  const { blockData, isFullscreen, currentCwd, addBlock } = useBlocks({ sessionId, currentPath });
+  const { blockData, isFullscreen, currentCwd, isCommandRunning, addBlock } = useBlocks({ sessionId, currentPath });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<TerminalRef>(null);
@@ -250,10 +250,14 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
   const handleCommand = useCallback(
     (command: string) => {
       if (!sessionId) return;
-      addBlock(command);
+      // If a command is already running (e.g. git asking for credentials),
+      // send input directly to the PTY without creating a new block.
+      if (!isCommandRunning) {
+        addBlock(command);
+      }
       window.terminalApi.sendInput(sessionId, command + '\r');
     },
-    [sessionId, addBlock],
+    [sessionId, addBlock, isCommandRunning],
   );
 
   const handleXtermData = useCallback(
@@ -360,6 +364,7 @@ export const BlockTerminal: React.FC<BlockTerminalProps> = ({
           sessionId={sessionId}
           onSubmit={handleCommand}
           placeholder="Enter command..."
+          isPassthrough={isCommandRunning}
         />
       )}
     </div>

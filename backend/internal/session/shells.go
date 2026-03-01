@@ -52,7 +52,13 @@ __blockterm_preexec() {
 
 # For zsh
 if [[ -n "${ZSH_VERSION}" ]]; then
-  [[ -f ~/.zshrc ]] && source ~/.zshrc
+  # Source the full user environment (login + interactive files).
+  # macOS Terminal starts login shells that source these; we must too
+  # so that credential helpers, SSH agents, PATH, etc. are available.
+  [[ -f ~/.zshenv ]]    && source ~/.zshenv
+  [[ -f ~/.zprofile ]]  && source ~/.zprofile
+  [[ -f ~/.zshrc ]]     && source ~/.zshrc
+  [[ -f ~/.zlogin ]]    && source ~/.zlogin
   # Disable the % indicator for commands without trailing newline
   unsetopt PROMPT_SP
   autoload -Uz add-zsh-hook
@@ -61,6 +67,9 @@ if [[ -n "${ZSH_VERSION}" ]]; then
 
 # For bash
 elif [[ -n "${BASH_VERSION}" ]]; then
+  # Source login profile files so credential helpers, SSH agents, etc.
+  # are available (mirrors what a regular login shell would do).
+  [[ -f ~/.bash_profile ]] && source ~/.bash_profile || [[ -f ~/.profile ]] && source ~/.profile
   [[ -f ~/.bashrc ]] && source ~/.bashrc
   # DEBUG trap fires before each interactive command.
   # Guard against re-entry so pipelines only emit one START.

@@ -65,14 +65,15 @@ export function cleanTerminalOutput(raw: string): string {
   }
   s = out.join('');
 
-  // Trim trailing whitespace from each line (artifacts from line clears)
-  // and trim leading/trailing blank lines from the overall output
+  // Trim trailing whitespace from each line (artifacts from line clears).
+  // Note: we intentionally do NOT strip leading/trailing blank lines here
+  // because this function is called on individual streaming chunks;
+  // stripping trailing '\n' from a chunk would remove the separator between
+  // the previous chunk and the next one when they are concatenated.
   s = s
     .split('\n')
     .map(line => line.trimEnd())
-    .join('\n')
-    .replace(/^\n+/, '')
-    .replace(/\n+$/, '');
+    .join('\n');
 
   return s;
 }
